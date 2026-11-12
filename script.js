@@ -1,581 +1,1267 @@
 (() => {
   "use strict";
 
-  const BASE = "https://pokeapi.co/api/v2";
-  const PAGE_SIZE = 20;
-  const TTL = 24 * 60 * 60 * 1000;
-  const memory = new Map();
-
   const $ = id => document.getElementById(id);
-  const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, c => ({
-    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+  const base = "https://pokeapi.co/api/v2";
+  const cache = new Map();
+
+  const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
   }[c]));
-  const normalize = value => String(value ?? "").trim().toLowerCase();
-  const meters = value => (Number(value) / 10).toFixed(1);
-  const kilograms = value => (Number(value) / 10).toFixed(1);
-  const pageCount = (total, size) => Math.max(1, Math.ceil(total / size));
-  const addFavorite = (items, id) => [...new Set([...items, id])];
-  const removeFavorite = (items, id) => items.filter(item => item !== id);
-  const idFromUrl = url => Number(String(url).match(/\/(\d+)\/?$/)?.[1]);
-  const image = p => p.sprites?.other?.["official-artwork"]?.front_default || p.sprites?.front_default || "";
 
-  const typeNames = {
-    normal:"Normal",fire:"Fogo",water:"Água",electric:"Elétrico",grass:"Planta",
-    ice:"Gelo",fighting:"Lutador",poison:"Veneno",ground:"Terra",flying:"Voador",
-    psychic:"Psíquico",bug:"Inseto",rock:"Pedra",ghost:"Fantasma",dragon:"Dragão",
-    dark:"Sombrio",steel:"Aço",fairy:"Fada"
-  };
-  const statNames = {
-    hp:"HP",attack:"Ataque",defense:"Defesa","special-attack":"Ataque especial",
-    "special-defense":"Defesa especial",speed:"Velocidade"
-  };
-  const safeImage = url => typeof url === "string" && url.startsWith("https://") ? url : "";
-  const picture = (url, name, cls="") => safeImage(url)
-    ? `<img src="${escapeHtml(url)}" alt="${escapeHtml(name)}" loading="lazy" class="${cls}">`
-    : `<div class="${cls} flex items-center justify-center text-sm text-[#53677b]" role="img" aria-label="Imagem indisponível">Sem imagem</div>`;
+  const norm = s => String(s ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9-]/g, "");
 
-  // Gateway: centraliza todas as requisições à PokéAPI e aplica cache de 24 horas.
-  const gateway = {
-    async get(path) {
-      const key = BASE + path;
-      const cached = memory.get(key);
-      if (cached && cached.expires > Date.now()) return cached.data;
-
-      try {
-        const stored = JSON.parse(localStorage.getItem("pokedex-cache:" + key) || "null");
-        if (stored?.expires > Date.now()) {
-          memory.set(key, stored);
-          return stored.data;
-        }
-      } catch (_) {}
-
-      let response;
-      try { response = await fetch(key); }
-      catch (_) { throw new Error("network"); }
-
-      if (response.status === 404) throw new Error("not-found");
-      if (!response.ok) throw new Error("network");
-
-      let data;
-      try { data = await response.json(); }
-      catch (_) { throw new Error("invalid"); }
-
-      if (!data || typeof data !== "object") throw new Error("invalid");
-
-      const entry = {data, expires:Date.now() + TTL};
-      memory.set(key, entry);
-      try { localStorage.setItem("pokedex-cache:" + key, JSON.stringify(entry)); }
-      catch (_) {}
-      return data;
-    },
-    pokemon: value => gateway.get("/pokemon/" + encodeURIComponent(normalize(value))),
-    list: (limit, offset) => gateway.get(`/pokemon?limit=${limit}&offset=${offset}`),
-    types: () => gateway.get("/type"),
-    type: name => gateway.get("/type/" + encodeURIComponent(name)),
-    species: id => gateway.get("/pokemon-species/" + id),
-    evolution: id => gateway.get("/evolution-chain/" + id)
+  const names = {
+    normal: "Normal",
+    fire: "Fogo",
+    water: "Água",
+    electric: "Elétrico",
+    grass: "Planta",
+    ice: "Gelo",
+    fighting: "Lutador",
+    poison: "Veneno",
+    ground: "Terra",
+    flying: "Voador",
+    psychic: "Psíquico",
+    bug: "Inseto",
+    rock: "Pedra",
+    ghost: "Fantasma",
+    dragon: "Dragão",
+    dark: "Sombrio",
+    steel: "Aço",
+    fairy: "Fada"
   };
 
-  // Serviço de favoritos: guarda apenas os IDs no armazenamento local.
-  const favoriteService = {
-    read() {
-      try {
-        const ids = JSON.parse(localStorage.getItem("pokedex-favorites-v1") || "[]");
-        return Array.isArray(ids) ? ids.filter(Number.isInteger) : [];
-      } catch (_) { return []; }
-    },
-    has(id) { return this.read().includes(id); },
-    toggle(id) {
-      const ids = this.read();
-      const next = ids.includes(id) ? removeFavorite(ids, id) : addFavorite(ids, id);
-      try { localStorage.setItem("pokedex-favorites-v1", JSON.stringify(next)); }
-      catch (_) { throw new Error("storage"); }
-      return next.includes(id);
+  async function api(path) {
+    if (cache.has(path)) return cache.get(path);
+    let response;
+    try {
+      response = await fetch(base + path);
+    } catch {
+      throw Error("Sem conexão com a PokéAPI.");
+    }
+    if (response.status === 404) throw Error("Pokémon não encontrado.");
+    if (!response.ok) throw Error("A PokéAPI está indisponível.");
+    const result = await response.json();
+    cache.set(path, result);
+    return result;
+  }
+
+  const pokemon = q => api("/pokemon/" + encodeURIComponent(norm(q)));
+  const sprite = p =>
+    p.sprites?.versions?.["generation-v"]?.["black-white"]?.animated?.front_default ||
+    p.sprites?.front_default ||
+    p.sprites?.other?.["official-artwork"]?.front_default;
+  const art = p => p.sprites?.other?.["official-artwork"]?.front_default || sprite(p);
+
+  const img = (url, name, cls) =>
+    url && url.startsWith("https://")
+      ? `<img src="${esc(url)}" alt="${esc(name)}" loading="lazy" class="${cls}">`
+      : `<div class="${cls}">Sprite indisponível</div>`;
+
+  const badges = p =>
+    (p.types || [])
+      .map(t => `<span class="badge" data-type="${esc(t.type.name)}">${esc(names[t.type.name] || t.type.name)}</span>`)
+      .join("");
+
+  const stats = p =>
+    (p.stats || [])
+      .map(s => `<div class="flex justify-between border-b border-[#b7cad0] py-1 text-sm"><span>${esc(s.stat.name.replaceAll("-", " "))}</span><strong>${Number(s.base_stat) || 0}</strong></div>`)
+      .join("");
+
+  const message = (id, text) => {
+    const el = $(id);
+    if (el) el.textContent = text;
+  };
+
+  let entries = [];
+  let filtered = [];
+  let page = 1;
+  let selectedType = "";
+  let typeIds = null;
+  let listVersion = 0;
+  let detailVersion = 0;
+  let compared = [];
+  let chosen = [null, null, null, null];
+  let battle = null;
+  let battleTimer = 0;
+  let suggestionTimer = 0;
+  let suggestionVersion = 0;
+  let suggestionIndex = -1;
+  let worldSuggestionTimer = 0;
+  let worldSuggestionVersion = 0;
+  let worldSuggestionIndex = -1;
+
+  function closeSuggestions() {
+    const box = $("pokemon-suggestions");
+    box.hidden = true;
+    $("pokemon-query").setAttribute("aria-expanded", "false");
+    $("pokemon-query").setAttribute("aria-activedescendant", "");
+    suggestionIndex = -1;
+  }
+
+  function suggestionMatches(value) {
+    const q = norm(value);
+    if (!q) return [];
+    return entries
+      .filter(p => p.name.includes(q) || String(p.id) === q || String(p.id).startsWith(q))
+      .slice(0, 8);
+  }
+
+  async function updateSuggestions() {
+    const input = $("pokemon-query");
+    const box = $("pokemon-suggestions");
+    const version = ++suggestionVersion;
+    clearTimeout(suggestionTimer);
+    const value = input.value.trim();
+
+    if (!value) {
+      closeSuggestions();
+      return;
+    }
+
+    box.hidden = false;
+    input.setAttribute("aria-expanded", "true");
+    box.innerHTML = '<div class="suggestion-state" role="status">Buscando sugestões...</div>';
+
+    suggestionTimer = setTimeout(async () => {
+      const matches = suggestionMatches(value);
+      if (version !== suggestionVersion) return;
+
+      if (!matches.length) {
+        box.innerHTML = '<div class="suggestion-state" role="status">Nenhum Pokémon encontrado.</div>';
+        return;
+      }
+
+      box.innerHTML = matches
+        .map(
+          (p, i) => `
+          <button id="suggestion-${p.id}" class="suggestion" role="option" aria-selected="${i === 0}" data-suggestion-id="${p.id}" type="button">
+            <span class="mono">#${p.id}</span>
+            <span class="capitalize flex-1">${esc(p.name)}</span>
+            <span class="suggestion-thumb" data-thumb-id="${p.id}" aria-hidden="true"></span>
+          </button>`
+        )
+        .join("");
+
+      suggestionIndex = 0;
+      input.setAttribute("aria-activedescendant", `suggestion-${matches[0].id}`);
+
+      await Promise.all(
+        matches.map(async p => {
+          try {
+            const data = await pokemon(p.id);
+            const url = sprite(data);
+            if (version === suggestionVersion && url) {
+              const holder = document.querySelector(`[data-thumb-id="${p.id}"]`);
+              if (holder) holder.innerHTML = img(url, p.name, "w-10 h-10 object-contain sprite");
+            }
+          } catch {}
+        })
+      );
+    }, 220);
+  }
+
+  function chooseSuggestion(id) {
+    const match = entries.find(p => p.id === id);
+    if (!match) return;
+    $("pokemon-query").value = match.name;
+    closeSuggestions();
+    showPokemon(match.id);
+  }
+
+  function closeWorldSuggestions() {
+    const box = $("world-suggestions");
+    box.hidden = true;
+    $("world-query").setAttribute("aria-expanded", "false");
+    $("world-query").setAttribute("aria-activedescendant", "");
+    worldSuggestionIndex = -1;
+  }
+
+  function worldSuggestionMatches(value) {
+    const q = norm(value);
+    if (!q) return [];
+    return entries
+      .filter(p => p.name.includes(q) || String(p.id) === q || String(p.id).startsWith(q))
+      .slice(0, 8);
+  }
+
+  async function updateWorldSuggestions() {
+    const input = $("world-query");
+    const box = $("world-suggestions");
+    const version = ++worldSuggestionVersion;
+    clearTimeout(worldSuggestionTimer);
+    const value = input.value.trim();
+
+    if (!value) {
+      closeWorldSuggestions();
+      return;
+    }
+
+    box.hidden = false;
+    input.setAttribute("aria-expanded", "true");
+    box.innerHTML = '<div class="suggestion-state" role="status">Buscando sugestões...</div>';
+
+    worldSuggestionTimer = setTimeout(async () => {
+      const matches = worldSuggestionMatches(value);
+      if (version !== worldSuggestionVersion) return;
+
+      if (!matches.length) {
+        box.innerHTML = '<div class="suggestion-state" role="status">Nenhum Pokémon encontrado.</div>';
+        return;
+      }
+
+      box.innerHTML = matches
+        .map(
+          (p, i) => `
+          <button id="world-suggestion-${p.id}" class="world-suggestion" role="option" aria-selected="${i === 0}" data-world-suggestion-id="${p.id}" type="button">
+            <span class="mono">#${p.id}</span>
+            <span class="capitalize flex-1">${esc(p.name)}</span>
+            <span data-world-thumb-id="${p.id}" aria-hidden="true"></span>
+          </button>`
+        )
+        .join("");
+
+      worldSuggestionIndex = 0;
+      input.setAttribute("aria-activedescendant", `world-suggestion-${matches[0].id}`);
+
+      await Promise.all(
+        matches.map(async p => {
+          try {
+            const data = await pokemon(p.id);
+            const url = sprite(data);
+            if (version === worldSuggestionVersion && url) {
+              const holder = document.querySelector(`[data-world-thumb-id="${p.id}"]`);
+              if (holder) holder.innerHTML = img(url, p.name, "w-10 h-10 object-contain sprite");
+            }
+          } catch {}
+        })
+      );
+    }, 220);
+  }
+
+  function chooseWorldSuggestion(id) {
+    const match = entries.find(p => p.id === id);
+    if (!match) return;
+    $("world-query").value = match.name;
+    closeWorldSuggestions();
+    $("world-load").click();
+  }
+
+  const favorites = () => {
+    try {
+      return JSON.parse(localStorage.getItem("pokedex-favorites-v1") || "[]").filter(Number.isInteger);
+    } catch {
+      return [];
     }
   };
 
-  // Estado da aplicação.
-  let catalog = [];
-  let filtered = [];
-  let selectedType = "";
-  let selectedTypeIds = null;
-  let listQuery = "";
-  let page = 1;
-  let listToken = 0;
-  let detailToken = 0;
-  let favoritesToken = 0;
-  let compared = [];
-
-  function message(error) {
-    if (error?.message === "not-found") return "Pokémon não encontrado. Confira o nome ou número e tente novamente.";
-    if (error?.message === "invalid") return "A API retornou uma resposta inválida. Tente novamente mais tarde.";
-    if (error?.message === "storage") return "Não foi possível salvar os favoritos neste navegador.";
-    return "Não foi possível conectar à PokéAPI. Confira sua conexão e tente novamente.";
-  }
-
-  function toast(text) {
-    const el = $("toast");
-    el.textContent = text;
-    el.hidden = false;
-    clearTimeout(toast.timer);
-    toast.timer = setTimeout(() => el.hidden = true, 4200);
-  }
-
-  function status(id, text, loading=false) {
-    $(id).textContent = text;
-    $(id).classList.toggle("loading", loading);
-  }
-
-  function validPokemon(p) {
-    return p && Number.isInteger(p.id) && typeof p.name === "string"
-      && Array.isArray(p.stats) && Array.isArray(p.types);
-  }
-
-  function typeBadges(p) {
-    return p.types.map(t =>
-      `<span class="badge" data-type="${escapeHtml(t.type.name)}">${escapeHtml(typeNames[t.type.name] || t.type.name)}</span>`
-    ).join(" ");
-  }
-
-  function stats(p) {
-    return p.stats.map(s => {
-      const value = Number(s.base_stat) || 0;
-      const label = statNames[s.stat.name] || s.stat.name;
-      return `<div class="grid grid-cols-[105px_1fr_36px] items-center gap-2 text-xs mb-3">
-        <span>${escapeHtml(label)}</span>
-        <div class="stat-track" role="meter" aria-label="${escapeHtml(label)}" aria-valuenow="${value}" aria-valuemin="0" aria-valuemax="255">
-          <div class="stat-fill" style="width:${Math.min(100,value/255*100)}%"></div>
-        </div>
-        <strong class="text-right mono">${value}</strong>
-      </div>`;
-    }).join("");
-  }
-
-  function card(p) {
-    const active = favoriteService.has(p.id);
-    const comparing = compared.some(x => x.id === p.id);
-    return `<article class="card" data-pokemon-id="${p.id}">
-      <div class="poke-img h-32 sm:h-40 flex items-center justify-center">${picture(image(p),p.name,"w-full h-full object-contain p-3")}</div>
-      <div class="p-3">
-        <p class="mono text-xs text-[#53677b]">#${String(p.id).padStart(4,"0")}</p>
-        <h3 class="font-extrabold capitalize text-lg truncate">${escapeHtml(p.name)}</h3>
-        <div class="flex flex-wrap gap-1 my-2">${typeBadges(p)}</div>
-        <div class="flex flex-wrap gap-2 mt-3">
-          <button type="button" class="secondary !p-2 !text-xs" data-action="open" data-id="${p.id}" aria-label="Ver detalhes de ${escapeHtml(p.name)}">Detalhes</button>
-          <button type="button" class="secondary !p-2 !text-xs" data-action="favorite" data-id="${p.id}" aria-pressed="${active}" aria-label="${active ? "Remover dos favoritos" : "Adicionar aos favoritos"}: ${escapeHtml(p.name)}">${active ? "♥ Salvo" : "♡ Favorito"}</button>
-          <button type="button" class="secondary !p-2 !text-xs" data-action="compare" data-id="${p.id}" aria-pressed="${comparing}">${comparing ? "✓ Comparando" : "Comparar"}</button>
-        </div>
-      </div>
-    </article>`;
-  }
-
-  function refreshButtons() {
-    document.querySelectorAll('[data-action="favorite"]').forEach(b => {
-      const active = favoriteService.has(Number(b.dataset.id));
-      b.textContent = active ? "♥ Salvo" : "♡ Favorito";
-      b.setAttribute("aria-pressed",String(active));
-      b.setAttribute("aria-label",`${active ? "Remover dos favoritos" : "Adicionar aos favoritos"}: ${b.closest("[data-pokemon-id]")?.querySelector("h2,h3")?.textContent || "Pokémon"}`);
-    });
-    document.querySelectorAll('[data-action="compare"]').forEach(b => {
-      const active = compared.some(p => p.id === Number(b.dataset.id));
-      b.textContent = active ? "✓ Comparando" : "Comparar";
-      b.setAttribute("aria-pressed",String(active));
-    });
-  }
-
   function switchView(view) {
-    document.querySelectorAll(".view").forEach(v => v.hidden = v.id !== view + "-view");
+    document.querySelectorAll(".view").forEach(e => {
+      e.hidden = e.id !== view + "-view";
+    });
     document.querySelectorAll(".navbtn").forEach(b => {
-      b.classList.toggle("active",b.dataset.view === view);
-      if (b.dataset.view === view) b.setAttribute("aria-current","page");
+      b.classList.toggle("active", b.dataset.view === view);
+      if (b.dataset.view === view) b.setAttribute("aria-current", "page");
       else b.removeAttribute("aria-current");
     });
+
+    if (view !== "world" && world.playing) pauseWorld(true);
+    if (view === "world" && world.playing) drawWorld();
     if (view === "favorites") renderFavorites();
     if (view === "compare") renderCompare();
   }
 
+  document.querySelectorAll(".navbtn").forEach(b =>
+    b.addEventListener("click", () => switchView(b.dataset.view))
+  );
+
+  function card(p) {
+    return `
+      <article class="card">
+        <div class="poke-img h-32 sm:h-40">${img(art(p), p.name, "w-full h-full object-contain p-3")}</div>
+        <div class="p-3">
+          <p class="mono text-xs text-[#53677b]">#${p.id}</p>
+          <h3 class="font-extrabold capitalize truncate">${esc(p.name)}</h3>
+          <div class="flex gap-1 flex-wrap my-2">${badges(p)}</div>
+          <div class="flex flex-wrap gap-2">
+            <button class="secondary !p-2 !text-xs" data-action="open" data-id="${p.id}" type="button">Detalhes</button>
+            <button class="secondary !p-2 !text-xs" data-action="favorite" data-id="${p.id}" type="button"></button>
+            <button class="secondary !p-2 !text-xs" data-action="compare" data-id="${p.id}" type="button"></button>
+          </div>
+        </div>
+      </article>`;
+  }
+
+  function refreshActions() {
+    document.querySelectorAll('[data-action="favorite"]').forEach(b => {
+      const yes = favorites().includes(+b.dataset.id);
+      b.textContent = yes ? "♥ Salvo" : "♡ Favorito";
+      b.setAttribute("aria-pressed", String(yes));
+    });
+    document.querySelectorAll('[data-action="compare"]').forEach(b => {
+      const yes = compared.some(p => p.id === +b.dataset.id);
+      b.textContent = yes ? "✓ Comparando" : "Comparar";
+      b.setAttribute("aria-pressed", String(yes));
+    });
+  }
+
+  async function showPokemon(q) {
+    switchView("search");
+    const version = ++detailVersion;
+    message("detail-status", "Consultando a PokéAPI...");
+    $("detail").replaceChildren();
+
+    try {
+      const p = await pokemon(q);
+      if (version !== detailVersion) return;
+
+      message("detail-status", "");
+      $("detail").innerHTML = `
+        <article class="panel p-5 md:p-7">
+          <div class="grid md:grid-cols-[38%_1fr] gap-6">
+            <div>${img(art(p), p.name, "poke-img w-full h-64 object-contain rounded-xl")}</div>
+            <div>
+              <p class="mono">Nº ${p.id}</p>
+              <h2 class="font-extrabold capitalize text-3xl my-2">${esc(p.name)}</h2>
+              <div class="flex gap-1 mb-4">${badges(p)}</div>
+              <button class="secondary mr-2" data-action="favorite" data-id="${p.id}" type="button"></button>
+              <button class="secondary" data-action="compare" data-id="${p.id}" type="button"></button>
+              <p class="my-4">Altura: ${(p.height / 10).toFixed(1)} m · Peso: ${(p.weight / 10).toFixed(1)} kg</p>
+              <h3 class="font-bold">Estatísticas base</h3>
+              ${stats(p)}
+            </div>
+          </div>
+          <div class="border-t-2 border-[#b7cad0] mt-6 pt-5">
+            <h3 class="font-bold">Espécie e evoluções</h3>
+            <div id="species-detail" aria-live="polite">Consultando espécie...</div>
+          </div>
+        </article>`;
+
+      refreshActions();
+
+      try {
+        const species = await api("/pokemon-species/" + p.id);
+        if (version !== detailVersion) return;
+
+        const flavor =
+          species.flavor_text_entries?.find(x => x.language.name === "pt") ||
+          species.flavor_text_entries?.find(x => x.language.name === "en");
+
+        $("species-detail").textContent = (flavor?.flavor_text || "Descrição indisponível.").replace(/\s+/g, " ");
+
+        if (species.evolution_chain?.url) {
+          const chainId = species.evolution_chain.url.match(/\/(\d+)\/?$/)?.[1];
+          if (chainId) {
+            const chain = await api("/evolution-chain/" + chainId);
+            if (version !== detailVersion) return;
+            const stages = [];
+            function walk(node) {
+              stages.push(node.species.name);
+              (node.evolves_to || []).forEach(walk);
+            }
+            walk(chain.chain);
+            $("species-detail").append(
+              document.createElement("br"),
+              document.createTextNode("Evoluções: " + stages.join(" → "))
+            );
+          }
+        }
+      } catch {
+        if (version === detailVersion) {
+          $("species-detail").textContent = "Dados da espécie indisponíveis no momento.";
+        }
+      }
+    } catch (e) {
+      if (version === detailVersion) message("detail-status", e.message);
+    }
+  }
+
+  async function loadCatalog() {
+    message("list-status", "Carregando catálogo...");
+    try {
+      const first = await api("/pokemon?limit=1&offset=0");
+      const all = await api("/pokemon?limit=" + first.count + "&offset=0");
+      entries = all.results
+        .map(p => ({
+          name: p.name,
+          id: Number(p.url.match(/\/(\d+)\/?$/)?.[1])
+        }))
+        .filter(p => p.id);
+      applyFilters();
+    } catch (e) {
+      message("list-status", e.message);
+    }
+
+    try {
+      const t = await api("/type");
+      t.results
+        .filter(x => names[x.name])
+        .forEach(x => {
+          const o = document.createElement("option");
+          o.value = x.name;
+          o.textContent = names[x.name];
+          $("type-filter").append(o);
+        });
+    } catch {}
+  }
+
   function applyFilters() {
-    const q = normalize(listQuery);
-    filtered = catalog.filter(p =>
-      (!selectedType || selectedTypeIds?.has(p.id)) &&
-      (!q || p.name.includes(q) || String(p.id).includes(q))
+    const q = norm($("list-query").value);
+    filtered = entries.filter(
+      p => (!q || p.name.includes(q) || String(p.id).includes(q)) && (!selectedType || typeIds?.has(p.id))
     );
     page = 1;
     renderList();
   }
 
   async function renderList() {
-    const token = ++listToken;
-    const total = filtered.length;
-    const pages = pageCount(total,PAGE_SIZE);
-    page = Math.min(Math.max(1,page),pages);
-    $("prev-btn").disabled = page <= 1;
-    $("next-btn").disabled = page >= pages;
-    $("page-info").textContent = `Página ${page} de ${pages} · ${total} resultados`;
+    const version = ++listVersion;
+    const pages = Math.max(1, Math.ceil(filtered.length / 20));
+    page = Math.max(1, Math.min(page, pages));
 
-    if (!total) {
-      $("catalog").innerHTML = "";
-      status("list-status","Nenhum Pokémon corresponde aos filtros.");
+    $("prev-btn").disabled = page === 1;
+    $("next-btn").disabled = page === pages;
+    message("page-info", `Página ${page} de ${pages}. ${filtered.length} resultados`);
+
+    if (!filtered.length) {
+      $("catalog").replaceChildren();
+      message("list-status", entries.length ? "Nenhum resultado." : "Carregando catálogo...");
       return;
     }
 
-    $("catalog").innerHTML = "";
-    status("list-status","Carregando Pokémon...",true);
-    const slice = filtered.slice((page-1)*PAGE_SIZE,page*PAGE_SIZE);
-    const results = await Promise.allSettled(slice.map(x => gateway.pokemon(x.id)));
-    if (token !== listToken) return;
+    message("list-status", "Carregando Pokémon...");
+    const result = await Promise.allSettled(filtered.slice((page - 1) * 20, page * 20).map(x => pokemon(x.id)));
+    if (version !== listVersion) return;
 
-    const good = results
-      .filter(r => r.status === "fulfilled" && validPokemon(r.value))
-      .map(r => r.value);
-    $("catalog").innerHTML = good.map(card).join("");
-    status("list-status",good.length === 0
-      ? "Não foi possível carregar esta página. Use os controles para tentar novamente."
-      : good.length < slice.length ? "Alguns Pokémon não puderam ser carregados." : "");
-  }
-
-  async function loadCatalog() {
-    status("list-status","Carregando catálogo...",true);
-    try {
-      const first = await gateway.list(1,0);
-      if (!Number.isInteger(first.count) || !Array.isArray(first.results)) throw new Error("invalid");
-      const all = await gateway.list(first.count,0);
-      if (!Array.isArray(all.results)) throw new Error("invalid");
-
-      catalog = all.results
-        .map(x => ({id:idFromUrl(x.url),name:normalize(x.name)}))
-        .filter(x => Number.isInteger(x.id) && x.name);
-      filtered = catalog.slice();
-      renderList();
-    } catch(e) {
-      status("list-status",message(e) + " Atualize a página para tentar novamente.");
-    }
-
-    try {
-      const result = await gateway.types();
-      if (!Array.isArray(result.results)) return;
-      result.results.filter(t => typeNames[t.name]).forEach(t => {
-        const option = document.createElement("option");
-        option.value = t.name;
-        option.textContent = typeNames[t.name];
-        $("type-filter").append(option);
-      });
-    } catch(_) { toast("Não foi possível carregar os filtros por tipo."); }
-  }
-
-  async function showPokemon(value) {
-    switchView("search");
-    const token = ++detailToken;
-    $("detail").innerHTML = "";
-    status("detail-status","Consultando Pokémon...",true);
-
-    try {
-      const p = await gateway.pokemon(value);
-      if (!validPokemon(p)) throw new Error("invalid");
-      if (token !== detailToken) return;
-      status("detail-status","");
-
-      const sprites = [
-        ["Sprite frontal",p.sprites?.front_default],
-        ["Sprite traseiro",p.sprites?.back_default],
-        ["Versão brilhante",p.sprites?.front_shiny],
-        ["Brilhante traseiro",p.sprites?.back_shiny]
-      ].filter(x => safeImage(x[1]));
-
-      $("detail").innerHTML = `<article class="panel p-5 md:p-8" data-pokemon-id="${p.id}">
-        <div class="detail-grid grid grid-cols-[minmax(220px,38%)_1fr] gap-7">
-          <div>
-            <div class="poke-img rounded-2xl h-64 md:h-80">${picture(image(p),p.name,"w-full h-full object-contain p-5")}</div>
-            ${sprites.length ? `<div class="flex flex-wrap gap-2 mt-3">${sprites.map(([label,url]) => `
-              <div class="text-center">
-                <div class="w-16 h-16 rounded-xl bg-[#dcebe6]">${picture(url,`${label} de ${p.name}`,"w-full h-full object-contain")}</div>
-                <span class="text-[10px]">${escapeHtml(label)}</span>
-              </div>`).join("")}</div>` : ""}
-          </div>
-          <div>
-            <p class="mono text-sm text-[#a34248] font-bold">Nº ${String(p.id).padStart(4,"0")}</p>
-            <h2 class="font-extrabold capitalize text-4xl mt-2 mb-3">${escapeHtml(p.name)}</h2>
-            <div class="flex gap-2 mb-5">${typeBadges(p)}</div>
-            <div class="flex flex-wrap gap-2 mb-6">
-              <button type="button" class="secondary" data-action="favorite" data-id="${p.id}"></button>
-              <button type="button" class="secondary" data-action="compare" data-id="${p.id}"></button>
-            </div>
-            <div class="grid grid-cols-2 gap-3 mb-6">
-              <div class="bg-[#dcebe6] p-4 rounded-xl"><span class="block text-xs">Altura</span><strong>${meters(p.height)} m</strong></div>
-              <div class="bg-[#dcebe6] p-4 rounded-xl"><span class="block text-xs">Peso</span><strong>${kilograms(p.weight)} kg</strong></div>
-            </div>
-            <h3 class="font-bold mb-2">Habilidades</h3>
-            <p class="capitalize mb-5">${p.abilities?.map(a => escapeHtml(a.ability.name.replaceAll("-"," "))).join(" · ") || "Não informadas"}</p>
-            <h3 class="font-bold mb-2">Estatísticas base</h3>${stats(p)}
-          </div>
-        </div>
-        <div class="grid md:grid-cols-2 gap-6 mt-8 pt-6 border-t-2 border-[#b7cad0]">
-          <div><h3 class="font-bold mb-3">Espécie</h3><div id="species-content" class="text-sm leading-relaxed" aria-live="polite">Carregando espécie...</div></div>
-          <div><h3 class="font-bold mb-3">Movimentos principais</h3><p class="text-sm capitalize">${p.moves?.slice(0,8).map(m => escapeHtml(m.move.name.replaceAll("-"," "))).join(" · ") || "Não informados"}</p></div>
-        </div>
-        <div class="mt-7 pt-6 border-t-2 border-[#b7cad0]">
-          <h3 class="font-bold mb-3">Evoluções</h3>
-          <div id="evolution-content" class="flex flex-wrap gap-3" aria-live="polite">Carregando evoluções...</div>
-        </div>
-      </article>`;
-
-      refreshButtons();
-      loadSpecies(p.id,token);
-    } catch(e) {
-      if (token === detailToken) status("detail-status",message(e));
-    }
-  }
-
-  async function loadSpecies(id,token) {
-    try {
-      const species = await gateway.species(id);
-      if (token !== detailToken) return;
-
-      const description = species.flavor_text_entries?.find(x => x.language?.name === "pt")?.flavor_text
-        || species.flavor_text_entries?.find(x => x.language?.name === "en")?.flavor_text;
-      const category = species.genera?.find(x => x.language?.name === "pt")?.genus
-        || species.genera?.find(x => x.language?.name === "en")?.genus;
-
-      $("species-content").innerHTML = `<p class="mb-3">${escapeHtml(description?.replace(/\s+/g," ") || "Descrição indisponível.")}</p>
-        <div class="grid grid-cols-2 gap-2">
-          <p><strong>Categoria:</strong> ${escapeHtml(category || "Não informada")}</p>
-          <p><strong>Habitat:</strong> ${escapeHtml(species.habitat?.name || "Não informado")}</p>
-          <p><strong>Taxa de captura:</strong> ${escapeHtml(species.capture_rate ?? "Não informada")}</p>
-          <p><strong>Felicidade base:</strong> ${escapeHtml(species.base_happiness ?? "Não informada")}</p>
-          <p><strong>Crescimento:</strong> ${escapeHtml(species.growth_rate?.name || "Não informado")}</p>
-          <p><strong>Classificação:</strong> ${species.is_mythical ? "Mítico" : species.is_legendary ? "Lendário" : "Não lendário"}</p>
-        </div>`;
-
-      if (!species.evolution_chain?.url) {
-        $("evolution-content").textContent = "Cadeia de evoluções indisponível.";
-        return;
-      }
-
-      try {
-        const chain = await gateway.evolution(idFromUrl(species.evolution_chain.url));
-        if (token !== detailToken) return;
-        const stages = [];
-
-        function walk(node,condition) {
-          if (!node?.species) return;
-          stages.push({name:node.species.name,id:idFromUrl(node.species.url),condition});
-          (node.evolves_to || []).forEach(next => {
-            const d = next.evolution_details?.[0];
-            const label = d?.min_level ? `Nível ${d.min_level}`
-              : d?.item?.name ? `Item: ${d.item.name}`
-              : d?.trigger?.name ? `Condição: ${d.trigger.name}`
-              : "Condição não informada";
-            walk(next,label);
-          });
-        }
-
-        walk(chain.chain,"Forma inicial");
-        const found = await Promise.allSettled(stages.map(s => gateway.pokemon(s.id)));
-        if (token !== detailToken) return;
-
-        $("evolution-content").innerHTML = stages.map((s,i) => `
-          <div class="bg-[#dcebe6] border border-[#9cb8bb] rounded-xl p-3 text-center w-32">
-            ${picture(found[i].status === "fulfilled" ? image(found[i].value) : "",s.name,"w-24 h-24 object-contain mx-auto")}
-            <p class="font-bold capitalize">${escapeHtml(s.name)}</p>
-            <p class="text-xs text-[#53677b]">${escapeHtml(s.condition)}</p>
-          </div>`).join("") || "Nenhuma evolução encontrada.";
-      } catch (_) {
-        if (token === detailToken) $("evolution-content").textContent = "Não foi possível carregar as evoluções.";
-      }
-    } catch (_) {
-      if (token === detailToken) {
-        $("species-content").textContent = "Informações da espécie indisponíveis no momento.";
-        $("evolution-content").textContent = "Evoluções indisponíveis no momento.";
-      }
-    }
+    $("catalog").innerHTML = result
+      .filter(x => x.status === "fulfilled")
+      .map(x => card(x.value))
+      .join("");
+    refreshActions();
+    message("list-status", result.some(x => x.status === "rejected") ? "Alguns Pokémon não puderam ser carregados." : "");
   }
 
   async function renderFavorites() {
-    const token = ++favoritesToken;
-    const ids = favoriteService.read();
-    $("favorites-list").innerHTML = "";
+    const ids = favorites();
+    $("favorites-list").replaceChildren();
 
     if (!ids.length) {
-      status("favorites-status","Nenhum favorito ainda. Adicione Pokémon pela Pesquisa.");
+      message("favorites-status", "Nenhum favorito adicionado ainda.");
       return;
     }
 
-    status("favorites-status","Carregando favoritos...",true);
-    const results = await Promise.allSettled(ids.map(id => gateway.pokemon(id)));
-    if (token !== favoritesToken) return;
-
-    $("favorites-list").innerHTML = results
-      .filter(x => x.status === "fulfilled" && validPokemon(x.value))
-      .map(x => card(x.value)).join("");
-    status("favorites-status",results.some(x => x.status === "rejected")
-      ? "Alguns favoritos não puderam ser carregados." : "");
+    message("favorites-status", "Carregando favoritos...");
+    const result = await Promise.allSettled(ids.map(id => pokemon(id)));
+    $("favorites-list").innerHTML = result
+      .filter(x => x.status === "fulfilled")
+      .map(x => card(x.value))
+      .join("");
+    refreshActions();
+    message("favorites-status", "");
   }
 
   function renderCompare() {
-    if (!compared.length) {
-      $("compare-list").innerHTML = '<p class="panel p-6 col-span-full">Selecione até dois Pokémon usando o botão Comparar na Pesquisa ou nos Favoritos.</p>';
-      return;
-    }
-
-    $("compare-list").innerHTML = compared.map(p => `
-      <article class="panel p-5" data-pokemon-id="${p.id}">
-        <div class="flex justify-between gap-2">
-          <span class="mono text-xs">#${p.id}</span>
-          <button type="button" class="secondary !p-2 !text-xs" data-action="remove-compare" data-id="${p.id}" aria-label="Remover ${escapeHtml(p.name)} da comparação">Remover</button>
-        </div>
-        ${picture(image(p),p.name,"poke-img w-full h-48 object-contain rounded-xl my-3")}
-        <h3 class="capitalize text-2xl font-extrabold mb-2">${escapeHtml(p.name)}</h3>
-        <div class="flex gap-2 mb-4">${typeBadges(p)}</div>
-        <p class="mb-2"><strong>Altura:</strong> ${meters(p.height)} m · <strong>Peso:</strong> ${kilograms(p.weight)} kg</p>
-        <p class="capitalize mb-5"><strong>Habilidades:</strong> ${p.abilities?.map(a => escapeHtml(a.ability.name.replaceAll("-"," "))).join(", ") || "Não informadas"}</p>
-        <h4 class="font-bold mb-3">Estatísticas base</h4>${stats(p)}
-      </article>`).join("");
+    $("compare-list").innerHTML = compared.length
+      ? compared
+          .map(
+            p => `
+            <article class="panel p-5">
+              <div class="flex justify-between items-center mb-3">
+                <span class="mono">#${p.id}</span>
+                <button class="secondary !p-2 !text-xs" data-action="remove-compare" data-id="${p.id}" type="button">Remover</button>
+              </div>
+              ${img(art(p), p.name, "poke-img w-full h-44 object-contain rounded-lg")}
+              <h3 class="font-extrabold capitalize text-xl mt-3">${esc(p.name)}</h3>
+              <div class="flex gap-1 my-2">${badges(p)}</div>
+              ${stats(p)}
+            </article>`
+          )
+          .join("")
+      : '<p class="panel p-5">Selecione até dois Pokémon na Pesquisa ou nos Favoritos.</p>';
   }
 
-  function runTests() {
-    const tests = [
-      ["Altura: 17 decímetros = 1,7 m", () => meters(17) === "1.7"],
-      ["Peso: 69 hectogramas = 6,9 kg", () => kilograms(69) === "6.9"],
-      ["Normalização de nomes", () => normalize("  PIKACHU  ") === "pikachu"],
-      ["Validação de resposta Pokémon", () => validPokemon({id:25,name:"pikachu",stats:[],types:[]}) && !validPokemon({name:"pikachu"})],
-      ["Paginação de 41 itens em páginas de 20", () => pageCount(41,20) === 3 && pageCount(0,20) === 1],
-      ["Favoritos: adicionar sem duplicar", () => JSON.stringify(addFavorite(addFavorite([1],25),25)) === "[1,25]"],
-      ["Favoritos: remover", () => JSON.stringify(removeFavorite([1,25],1)) === "[25]"]
-    ];
+  document.addEventListener("click", async e => {
+    if (!e.target.closest("#pokemon-query,#pokemon-suggestions")) closeSuggestions();
+    if (!e.target.closest("#world-query,#world-suggestions")) closeWorldSuggestions();
 
-    $("test-results").innerHTML = tests.map(([label,fn]) => {
-      let passed = false;
-      try { passed = !!fn(); } catch (_) {}
-      return `<p class="flex items-center gap-3">
-        <strong class="${passed ? "text-[#247654]" : "text-[#c43d32]"}">${passed ? "APROVADO" : "REPROVADO"}</strong>
-        <span>${escapeHtml(label)}</span>
-      </p>`;
-    }).join("");
-  }
+    const b = e.target.closest("[data-action]");
+    if (!b) return;
 
-  // Eventos da interface.
-  document.querySelectorAll(".navbtn").forEach(b =>
-    b.addEventListener("click",() => switchView(b.dataset.view))
-  );
+    const id = +b.dataset.id;
+    const action = b.dataset.action;
 
-  $("search-form").addEventListener("submit",e => {
-    e.preventDefault();
-    const q = normalize($("pokemon-query").value);
-    if (!q) {
-      status("detail-status","Digite um nome ou número da Pokédex.");
-      return;
+    if (action === "open") {
+      showPokemon(id);
+      window.scrollTo({ top: 0, behavior: "smooth" });
     }
-    showPokemon(q);
-  });
 
-  $("random-btn").addEventListener("click",async e => {
-    const button = e.currentTarget;
-    button.disabled = true;
-    try {
-      const count = catalog.length || (await gateway.list(1,0)).count;
-      if (!count) throw new Error("invalid");
-      const id = catalog.length
-        ? catalog[Math.floor(Math.random()*catalog.length)].id
-        : Math.floor(Math.random()*count)+1;
-      await showPokemon(id);
-    } catch(err) { toast(message(err)); }
-    finally { button.disabled = false; }
-  });
-
-  let debounce;
-  $("list-query").addEventListener("input",e => {
-    clearTimeout(debounce);
-    debounce = setTimeout(() => {
-      listQuery = e.target.value;
-      applyFilters();
-    },220);
-  });
-
-  $("type-filter").addEventListener("change",async e => {
-    selectedType = e.target.value;
-    selectedTypeIds = null;
-
-    if (selectedType) {
-      const chosen = selectedType;
-      status("list-status","Aplicando filtro...",true);
+    if (action === "favorite") {
+      const old = favorites();
+      const yes = !old.includes(id);
       try {
-        const data = await gateway.type(chosen);
-        if (chosen !== selectedType) return;
-        if (!Array.isArray(data.pokemon)) throw new Error("invalid");
-        selectedTypeIds = new Set(data.pokemon.map(x => idFromUrl(x.pokemon.url)));
-      } catch(err) {
+        localStorage.setItem("pokedex-favorites-v1", JSON.stringify(yes ? [...old, id] : old.filter(x => x !== id)));
+        refreshActions();
+        if (!$("favorites-view").hidden) renderFavorites();
+      } catch {
+        message("detail-status", "Não foi possível salvar favoritos neste navegador.");
+      }
+    }
+
+    if (action === "remove-compare") {
+      compared = compared.filter(x => x.id !== id);
+      renderCompare();
+      refreshActions();
+    }
+
+    if (action === "compare") {
+      if (compared.some(p => p.id === id)) {
+        compared = compared.filter(p => p.id !== id);
+      } else if (compared.length < 2) {
+        try {
+          compared.push(await pokemon(id));
+        } catch (err) {
+          message("detail-status", err.message);
+        }
+      } else {
+        message("detail-status", "Remova um Pokémon da comparação primeiro.");
+        return;
+      }
+      renderCompare();
+      refreshActions();
+    }
+  });
+
+  $("pokemon-query").addEventListener("input", updateSuggestions);
+  $("pokemon-query").addEventListener("keydown", e => {
+    const box = $("pokemon-suggestions");
+    const items = [...box.querySelectorAll("[data-suggestion-id]")];
+    if (e.key === "Escape") {
+      closeSuggestions();
+      return;
+    }
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      if (!items.length) return;
+      e.preventDefault();
+      suggestionIndex = (suggestionIndex + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
+      items.forEach((item, i) => item.setAttribute("aria-selected", String(i === suggestionIndex)));
+      $("pokemon-query").setAttribute("aria-activedescendant", items[suggestionIndex].id);
+      items[suggestionIndex].scrollIntoView({ block: "nearest" });
+      return;
+    }
+    if (e.key === "Enter" && suggestionIndex >= 0 && items[suggestionIndex]) {
+      e.preventDefault();
+      chooseSuggestion(+items[suggestionIndex].dataset.suggestionId);
+    }
+  });
+
+  $("pokemon-suggestions").addEventListener("click", e => {
+    const item = e.target.closest("[data-suggestion-id]");
+    if (item) chooseSuggestion(+item.dataset.suggestionId);
+  });
+
+  $("search-form").addEventListener("submit", e => {
+    e.preventDefault();
+    const q = norm($("pokemon-query").value);
+    closeSuggestions();
+    if (q) showPokemon(q);
+    else message("detail-status", "Digite um nome ou número.");
+  });
+
+  $("random-btn").addEventListener("click", async () => {
+    try {
+      const count = entries.length || (await api("/pokemon?limit=1&offset=0")).count;
+      showPokemon(entries.length ? entries[Math.floor(Math.random() * count)].id : Math.floor(Math.random() * count) + 1);
+    } catch (e) {
+      message("detail-status", e.message);
+      switchView("search");
+    }
+  });
+
+  $("list-query").addEventListener("input", applyFilters);
+  $("type-filter").addEventListener("change", async e => {
+    selectedType = e.target.value;
+    typeIds = null;
+    if (selectedType) {
+      try {
+        const current = selectedType;
+        const result = await api("/type/" + current);
+        if (current !== selectedType) return;
+        typeIds = new Set(result.pokemon.map(x => Number(x.pokemon.url.match(/\/(\d+)\/?$/)?.[1])));
+      } catch (err) {
         selectedType = "";
         e.target.value = "";
-        status("list-status",message(err));
-        return;
+        message("list-status", err.message);
       }
     }
     applyFilters();
   });
 
-  $("prev-btn").addEventListener("click",() => {
-    if (page > 1) { page--; renderList(); }
+  $("prev-btn").addEventListener("click", () => {
+    page--;
+    renderList();
   });
 
-  $("next-btn").addEventListener("click",() => {
-    if (page < pageCount(filtered.length,PAGE_SIZE)) { page++; renderList(); }
+  $("next-btn").addEventListener("click", () => {
+    page++;
+    renderList();
   });
 
-  document.addEventListener("click",async e => {
-    const b = e.target.closest("[data-action]");
-    if (!b) return;
-    const id = Number(b.dataset.id);
+  // BATALHA
+  for (let i = 0; i < 4; i++) {
+    const host = $(i < 2 ? "team-input-one" : "team-input-two");
+    const form = document.createElement("form");
+    form.className = "fighter-form mb-4";
+    form.dataset.slot = i;
+    form.hidden = i % 2 === 1;
+    form.innerHTML = `
+      <label for="fighter-${i}" class="block font-bold mb-1">Pokémon ${(i % 2) + 1}</label>
+      <div class="flex gap-2">
+        <input id="fighter-${i}" class="field" autocomplete="off" placeholder="Nome ou número">
+        <button class="secondary" type="submit">Escolher</button>
+      </div>
+      <div id="fighter-status-${i}" class="text-sm mt-2" role="status"></div>`;
+    host.append(form);
 
-    if (b.dataset.action === "open") {
-      showPokemon(id);
-      window.scrollTo({top:0,behavior:"smooth"});
-    }
-
-    if (b.dataset.action === "favorite") {
-      try {
-        const active = favoriteService.toggle(id);
-        refreshButtons();
-        toast(active ? "Adicionado aos favoritos." : "Removido dos favoritos.");
-        if (!$("favorites-view").hidden) renderFavorites();
-      } catch(err) { toast(message(err)); }
-    }
-
-    if (b.dataset.action === "remove-compare") {
-      compared = compared.filter(p => p.id !== id);
-      renderCompare();
-      refreshButtons();
-    }
-
-    if (b.dataset.action === "compare") {
-      const existing = compared.some(p => p.id === id);
-      if (existing) {
-        compared = compared.filter(p => p.id !== id);
-        renderCompare();
-        refreshButtons();
+    form.addEventListener("submit", async e => {
+      e.preventDefault();
+      const button = e.currentTarget.querySelector("button");
+      const q = norm($("fighter-" + i).value);
+      chosen[i] = null;
+      if (!q) {
+        message("fighter-status-" + i, "Digite um nome ou número.");
         return;
       }
-      if (compared.length >= 2) {
-        toast("Remova um Pokémon antes de adicionar outro à comparação.");
-        return;
-      }
-
-      b.disabled = true;
+      button.disabled = true;
+      message("fighter-status-" + i, "Consultando...");
       try {
-        const p = await gateway.pokemon(id);
-        if (!validPokemon(p)) throw new Error("invalid");
-        compared.push(p);
-        renderCompare();
-        refreshButtons();
-        toast("Pokémon adicionado à comparação.");
-      } catch(err) { toast(message(err)); }
-      finally { b.disabled = false; }
+        chosen[i] = await pokemon(q);
+        message("fighter-status-" + i, chosen[i].name + " selecionado.");
+      } catch (err) {
+        message("fighter-status-" + i, err.message);
+      } finally {
+        button.disabled = false;
+      }
+    });
+  }
+
+  $("battle-format").addEventListener("change", e =>
+    document.querySelectorAll(".fighter-form").forEach(f => {
+      if (+f.dataset.slot % 2) f.hidden = e.target.value !== "2";
+    })
+  );
+
+  function stopBattle() {
+    clearTimeout(battleTimer);
+    battleTimer = 0;
+  }
+
+  function battleTurn() {
+    if (!battle || battle.paused) return;
+    const live = battle.fighters.filter(f => f.hp > 0);
+    const teams = new Set(live.map(f => f.team));
+
+    if (teams.size < 2 || battle.turn >= 120) {
+      message("battle-status", teams.size === 1 ? `Treinador ${live[0].team} venceu!` : "Batalha encerrada em empate.");
+      stopBattle();
+      $("battle-pause").hidden = true;
+      return;
+    }
+
+    const attacker = live[battle.turn % live.length];
+    const target = live.find(f => f.team !== attacker.team);
+    const attack = attacker.p.stats.find(s => s.stat.name === "attack")?.base_stat || 40;
+    const defense = target.p.stats.find(s => s.stat.name === "defense")?.base_stat || 40;
+    const damage = Math.max(1, Math.floor(((12 + attack * 0.22) * attack) / (defense + 35)));
+
+    target.hp = Math.max(0, target.hp - damage);
+    const li = document.createElement("li");
+    li.textContent = `Turno ${++battle.turn}: ${attacker.p.name} atingiu ${target.p.name} (${damage} de dano; ${target.hp} HP restantes).`;
+    $("battle-log").append(li);
+
+    battleTimer = setTimeout(
+      battleTurn,
+      matchMedia("(prefers-reduced-motion: reduce)").matches ? 250 : 850
+    );
+  }
+
+  $("battle-start").addEventListener("click", () => {
+    const slots = $("battle-format").value === "2" ? [0, 1, 2, 3] : [0, 2];
+    const missing = slots.find(i => !chosen[i]);
+    if (missing !== undefined) {
+      message("battle-status", "Escolha todos os Pokémon antes de começar.");
+      $("fighter-" + missing).focus();
+      return;
+    }
+
+    stopBattle();
+    battle = {
+      fighters: slots.map(i => ({
+        team: i < 2 ? 1 : 2,
+        p: chosen[i],
+        hp: 2 * (chosen[i].stats.find(s => s.stat.name === "hp")?.base_stat || 40) + 40
+      })),
+      turn: 0,
+      paused: false
+    };
+
+    $("battle-log").replaceChildren();
+    message("battle-status", "Batalha recreativa iniciada.");
+    $("battle-pause").hidden = false;
+    $("battle-reset").hidden = false;
+    $("battle-pause").textContent = "Pausar";
+    battleTimer = setTimeout(battleTurn, 850);
+  });
+
+  $("battle-pause").addEventListener("click", () => {
+    if (!battle) return;
+    battle.paused = !battle.paused;
+    $("battle-pause").textContent = battle.paused ? "Continuar" : "Pausar";
+    stopBattle();
+    if (!battle.paused) battleTimer = setTimeout(battleTurn, 400);
+  });
+
+  $("battle-reset").addEventListener("click", () => $("battle-start").click());
+
+  // TESTES
+  $("run-tests").addEventListener("click", () => {
+    const tests = [
+      ["Normalização", norm(" PIKACHU ") === "pikachu"],
+      ["Grade do mundo", map.every(row => row.length === MW)],
+      ["Ponto inicial transitável", !solid(5, 20)],
+      ["Limite da câmera", Math.max(0, Math.min(0, 5)) === 0],
+      ["Paginação", Math.ceil(41 / 20) === 3]
+    ];
+    $("test-results").innerHTML = tests
+      .map(([title, ok]) => `<p><strong>${ok ? "APROVADO" : "REPROVADO"}</strong> ${title}</p>`)
+      .join("");
+  });
+
+  // MUNDO ABERTO
+  const raw = [
+    "#..........................................#",
+    "#..H..T....T....T.....T...~~~~~~~~~~~~.....#",
+    "#.....T.........T.........~~~~~~~~~~~~.....#",
+    "#..S............T.....T...~~~~~~~~~~~~.....#",
+    "#..T...T..................~~~~~~~~~~~~.....#",
+    "#..F........T.............~~~~~~~~~~~~.....#",
+    "#...........T.............~~~~~~~~~~~~.....#",
+    "#...........T...T.........~~~~~~~~~~~~.....#",
+    "#..H...T.....F............~~~~~~~~~~~~.....#",
+    "#...........T.............============.....#",
+    "#...........T....T........============.....#",
+    "#..S........T.............~~~~~~~~~~~~.....#",
+    "#...........T....T........~~~~~~~~~~~~.....#",
+    "#...........T....T........~~~~~~~~~~~~.....#",
+    "#.....T.....T....T........~~~~~~~~~~~~.....#",
+    "#...........T.............~~~~~~~~~~~~.....#",
+    "#...FFFF....T......T......T....T...........#",
+    "#...........T.............T....T...........#",
+    "#...........T.............T................#",
+    "#....S......T.............T....H...........#",
+    "#...........T.............T................#",
+    "#.....T.....T.............T....S...........#",
+    "#.....T.....T..............................#",
+    "#.....T.....T.............T.....T..........#",
+    "#.....T.....T.............T.....T..........#",
+    "#...........T......T....F.......T..........#",
+    "#T..........T...................T..........#",
+    "#...........T...................T..........#",
+    "#...........T......T............T..........#"
+  ];
+
+  const MW = 44;
+  const MH = raw.length;
+  const T = 16;
+  const map = raw.map(row => row.padEnd(MW, "#").slice(0, MW).split(""));
+
+  function paintRoad() {
+    for (let x = 4; x <= 36; x++) {
+      for (let y = 19; y <= 21; y++) {
+        if (map[y]?.[x] !== undefined && !["~", "=", "H", "S"].includes(map[y][x])) map[y][x] = "p";
+      }
+    }
+    for (let y = 4; y <= 24; y++) {
+      for (let x = 4; x <= 6; x++) {
+        if (map[y]?.[x] && !["H", "S"].includes(map[y][x])) map[y][x] = "p";
+      }
+    }
+    for (let y = 9; y <= 20; y++) {
+      for (let x = 22; x <= 24; x++) {
+        if (map[y]?.[x] && !["~", "="].includes(map[y][x])) map[y][x] = "p";
+      }
+    }
+    for (let x = 24; x <= 37; x++) {
+      for (let y = 9; y <= 10; y++) {
+        if (map[y]?.[x] && map[y][x] !== "=") map[y][x] = "p";
+      }
+    }
+  }
+  paintRoad();
+
+  const points = [
+    { x: 5, y: 4, text: "Placa da Vila do Cedro: siga pela trilha até o lago." },
+    { x: 5, y: 12, text: "Bosque do Musgo: a ponte liga as duas margens." },
+    { x: 5, y: 20, text: "Rota das Flores: uma trilha tranquila começa aqui." },
+    { x: 36, y: 22, text: "Clareira do Sol: um lugar para descansar." },
+    { x: 36, y: 9, text: "Ponte do Lago: atravesse para chegar à clareira." },
+    { x: 4, y: 9, text: "Casa do Cedro: as janelas estão iluminadas." },
+    { x: 36, y: 20, text: "Cabana da Clareira: um pequeno refúgio à beira da rota." }
+  ];
+
+  const solid = (x, y) => x < 0 || y < 0 || x >= MW || y >= MH || ["#", "T", "H", "~", "F"].includes(map[y][x]);
+
+  const canvas = $("world-canvas");
+  const ctx = canvas.getContext("2d", { alpha: false });
+  ctx.imageSmoothingEnabled = false;
+
+  const world = {
+    pokemon: null,
+    image: null,
+    playing: false,
+    paused: false,
+    x: 5,
+    y: 20,
+    toX: 5,
+    toY: 20,
+    progress: 0,
+    facing: "down",
+    steps: 0,
+    pressed: [],
+    raf: 0,
+    last: 0,
+    area: "",
+    reduce: false,
+    cameraX: 0,
+    cameraY: 0
+  };
+
+  let worldVersion = 0;
+
+  $("world-query").addEventListener("input", () => {
+    worldVersion++;
+    world.pokemon = null;
+    world.image = null;
+    $("world-enter").disabled = true;
+    $("world-picked").hidden = true;
+    updateWorldSuggestions();
+  });
+
+  $("world-query").addEventListener("keydown", e => {
+    const box = $("world-suggestions");
+    const items = [...box.querySelectorAll("[data-world-suggestion-id]")];
+    if (e.key === "Escape") {
+      closeWorldSuggestions();
+      return;
+    }
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      if (!items.length) return;
+      e.preventDefault();
+      worldSuggestionIndex = (worldSuggestionIndex + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
+      items.forEach((item, i) => item.setAttribute("aria-selected", String(i === worldSuggestionIndex)));
+      $("world-query").setAttribute("aria-activedescendant", items[worldSuggestionIndex].id);
+      items[worldSuggestionIndex].scrollIntoView({ block: "nearest" });
+      return;
+    }
+    if (e.key === "Enter" && worldSuggestionIndex >= 0 && items[worldSuggestionIndex]) {
+      e.preventDefault();
+      chooseWorldSuggestion(+items[worldSuggestionIndex].dataset.worldSuggestionId);
     }
   });
 
-  $("run-tests").addEventListener("click",runTests);
+  $("world-suggestions").addEventListener("click", e => {
+    const item = e.target.closest("[data-world-suggestion-id]");
+    if (item) chooseWorldSuggestion(+item.dataset.worldSuggestionId);
+  });
 
-  // Inicialização.
-  runTests();
+  $("world-form").addEventListener("submit", async e => {
+    e.preventDefault();
+    const q = norm($("world-query").value);
+    const v = ++worldVersion;
+    const b = $("world-load");
+
+    if (!q) {
+      message("world-status", "Digite um nome ou número.");
+      return;
+    }
+
+    b.disabled = true;
+    message("world-status", "Carregando Pokémon da PokéAPI...");
+
+    try {
+      const p = await pokemon(q);
+      const url = sprite(p);
+      if (!url || !url.startsWith("https://")) throw Error("Sprite indisponível para este Pokémon.");
+
+      const image = new Image();
+      image.crossOrigin = "anonymous";
+      await new Promise((resolve, reject) => {
+        image.onload = resolve;
+        image.onerror = () => reject(Error("Não foi possível carregar o sprite."));
+        image.src = url;
+      });
+
+      if (v !== worldVersion) return;
+
+      world.pokemon = p;
+      world.image = image;
+      $("world-selected-image").innerHTML = img(url, p.name, "w-full h-full object-contain sprite");
+      message("world-selected-name", `#${p.id} ${p.name}`);
+      $("world-selected-types").innerHTML = badges(p);
+      $("world-picked").hidden = false;
+      $("world-enter").disabled = false;
+      message("world-status", "Pokémon carregado. A rota está pronta para explorar.");
+    } catch (err) {
+      if (v === worldVersion) message("world-status", err.message);
+    } finally {
+      b.disabled = false;
+    }
+  });
+
+  function say(text) {
+    message("world-message", text);
+  }
+
+  function areaAt(x, y) {
+    if (x >= 29 && y <= 16) return "Lago das Pontes";
+    if (x >= 29) return "Clareira do Sol";
+    if (y <= 11) return "Vila do Cedro";
+    if (x <= 17) return "Bosque do Musgo";
+    return "Rota das Flores";
+  }
+
+  function areaUpdate() {
+    const a = areaAt(world.x, world.y);
+    if (a !== world.area) {
+      world.area = a;
+      message("world-area", a);
+      say(`Você chegou a ${a}.`);
+      if (!world.reduce && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        $("world-frame").classList.remove("entering");
+        void $("world-frame").offsetWidth;
+        $("world-frame").classList.add("entering");
+      }
+    }
+  }
+
+  function interact() {
+    if (!world.playing || world.paused) return;
+    const dir = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }[world.facing];
+    const point = points.find(
+      p => Math.abs(p.x - world.x) + Math.abs(p.y - world.y) <= 1 || (p.x === world.x + dir[0] && p.y === world.y + dir[1])
+    );
+    say(point ? point.text : "A trilha continua. Explore e aproxime-se de placas ou casas.");
+  }
+
+  $("world-interact").addEventListener("click", interact);
+
+  function pauseWorld(v) {
+    world.paused = v;
+    world.pressed = [];
+    $("world-overlay").hidden = !v;
+    $("world-pause").setAttribute("aria-pressed", String(v));
+    $("world-pause").querySelector(".pause-word").hidden = v;
+    $("world-pause").querySelector(".resume-word").hidden = !v;
+
+    if (v) {
+      cancelAnimationFrame(world.raf);
+      world.raf = 0;
+      world.last = 0;
+    } else if (world.playing) {
+      startLoop();
+    }
+    if (world.playing) drawWorld();
+  }
+
+  $("world-pause").addEventListener("click", () => pauseWorld(!world.paused));
+
+  $("world-enter").addEventListener("click", () => {
+    if (!world.pokemon || !world.image) return;
+    world.playing = true;
+    world.x = world.toX = 5;
+    world.y = world.toY = 20;
+    world.progress = 0;
+    world.steps = 0;
+    world.facing = "down";
+    world.area = "";
+
+    $("world-selection").hidden = true;
+    $("world-play").hidden = false;
+    $("world-hud-image").innerHTML = img(sprite(world.pokemon), world.pokemon.name, "w-full h-full object-contain sprite");
+    message("world-hud-name", world.pokemon.name);
+    $("world-hud-types").innerHTML = badges(world.pokemon);
+
+    pauseWorld(false);
+    areaUpdate();
+    say("Bem-vindo à rota! Use as setas, WASD ou os controles touch. Interaja com placas e casas.");
+    drawWorld();
+    canvas.focus({ preventScroll: true });
+  });
+
+  $("world-exit").addEventListener("click", () => {
+    pauseWorld(true);
+    world.playing = false;
+    $("world-play").hidden = true;
+    $("world-selection").hidden = false;
+    message("world-status", "Você saiu do mundo. Seu Pokémon permanece selecionado.");
+    $("world-enter").focus();
+  });
+
+  $("world-reduce").addEventListener("change", e => {
+    world.reduce = e.target.checked;
+    drawWorld();
+  });
+
+  function direction() {
+    return world.pressed.at(-1);
+  }
+
+  function move(dt) {
+    if (world.progress > 0) {
+      const speed = world.reduce || matchMedia("(prefers-reduced-motion: reduce)").matches ? 100 : 165;
+      world.progress = Math.min(1, world.progress + dt / speed);
+      if (world.progress >= 1) {
+        world.x = world.toX;
+        world.y = world.toY;
+        world.progress = 0;
+        world.steps++;
+        areaUpdate();
+        const p = points.find(pt => pt.x === world.x && pt.y === world.y);
+        if (p) say(p.text);
+      }
+      return;
+    }
+
+    const d = direction();
+    if (!d) return;
+    const [dx, dy] = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }[d];
+    const nx = world.x + dx;
+    const ny = world.y + dy;
+
+    if (solid(nx, ny)) return;
+    if (d === "left" || d === "right") world.facing = d;
+    world.toX = nx;
+    world.toY = ny;
+    world.progress = 0.001;
+  }
+
+  function rect(x, y, w, h, c) {
+    ctx.fillStyle = c;
+    ctx.fillRect(Math.round(x), Math.round(y), w, h);
+  }
+
+  function tile(x, y, c, time) {
+    const X = x * T;
+    const Y = y * T;
+    const seed = (x * 13 + y * 17) % 11;
+
+    rect(X, Y, 16, 16, (x + y) % 3 ? "#70b658" : "#79bc5d");
+    rect(X, Y + 14, 16, 2, "#5b9d4b");
+
+    if (c === "p") {
+      rect(X, Y, 16, 16, "#d5b47a");
+      rect(X, Y + 13, 16, 3, "#bc9466");
+      if (seed < 5) rect(X + 4, Y + 5, 2, 1, "#a77e55");
+    } else if (c === "~") {
+      rect(X, Y, 16, 16, "#478fb2");
+      rect(X, Y + 12, 16, 4, "#347b9d");
+      if ((!world.reduce && !matchMedia("(prefers-reduced-motion: reduce)").matches) || seed % 2) {
+        rect(X + 3 + ((Math.floor(time / 700) + seed) % 3), Y + 5, 6, 1, "#8bd2d1");
+      }
+    } else if (c === "=") {
+      rect(X, Y, 16, 16, "#478fb2");
+      rect(X, Y + 2, 16, 12, "#ac7848");
+      rect(X, Y + 4, 16, 2, "#dbaf70");
+      rect(X, Y + 11, 16, 2, "#6e513c");
+    } else if (c === "F") {
+      rect(X + 2, Y + 7, 12, 7, "#438b49");
+      rect(X + 5, Y + 3, 3, 5, "#eac95e");
+      rect(X + 9, Y + 8, 3, 3, "#ed8b76");
+    } else if (c === "S") {
+      rect(X + 6, Y + 7, 4, 9, "#76523c");
+      rect(X + 2, Y + 2, 12, 8, "#f7e7a8");
+      rect(X + 3, Y + 3, 10, 1, "#a36947");
+      rect(X + 7, Y + 5, 2, 3, "#72553c");
+    } else if (c === "H") {
+      rect(X + 1, Y + 8, 14, 8, "#e9d5a5");
+      rect(X + 1, Y + 4, 14, 5, "#af564d");
+      rect(X + 4, Y + 1, 8, 4, "#ce7960");
+      rect(X + 6, Y + 10, 4, 6, "#604f43");
+    } else if (c === "T") {
+      rect(X + 6, Y + 9, 4, 7, "#75523c");
+      rect(X + 1, Y + 3, 14, 10, "#285f46");
+      rect(X + 3, Y + 1, 10, 11, "#41835a");
+      rect(X + 4, Y + 4, 5, 2, "#66a66a");
+    } else if (c === "#") {
+      rect(X, Y, 16, 16, "#315b43");
+      rect(X, Y + 3, 16, 3, "#477854");
+      rect(X + 3, Y + 9, 10, 5, "#254b39");
+    } else {
+      if (seed < 5) {
+        rect(X + 4, Y + 9, 1, 3, "#4e9949");
+        rect(X + 7, Y + 7, 1, 4, "#4e9949");
+      }
+      if (seed === 9) {
+        rect(X + 10, Y + 7, 2, 2, "#f8d470");
+        rect(X + 11, Y + 6, 1, 1, "#f3f0c5");
+      }
+    }
+  }
+
+  function drawWorld(time = 0) {
+    if (!world.playing) return;
+    const w = canvas.width;
+    const h = canvas.height;
+    const px = (world.x + (world.toX - world.x) * world.progress) * T;
+    const py = (world.y + (world.toY - world.y) * world.progress) * T;
+
+    world.cameraX = Math.max(0, Math.min(MW * T - w, Math.round(px - w / 2 + 8)));
+    world.cameraY = Math.max(0, Math.min(MH * T - h, Math.round(py - h / 2 + 8)));
+
+    ctx.imageSmoothingEnabled = false;
+    rect(0, 0, w, h, "#315b43");
+    ctx.save();
+    ctx.translate(-world.cameraX, -world.cameraY);
+
+    const minX = Math.max(0, Math.floor(world.cameraX / T) - 1);
+    const maxX = Math.min(MW, Math.ceil((world.cameraX + w) / T) + 1);
+    const minY = Math.max(0, Math.floor(world.cameraY / T) - 1);
+    const maxY = Math.min(MH, Math.ceil((world.cameraY + h) / T) + 1);
+
+    for (let y = minY; y < maxY; y++) {
+      for (let x = minX; x < maxX; x++) {
+        tile(x, y, map[y][x], time);
+      }
+    }
+
+    const actors = [];
+    for (let y = minY; y < maxY; y++) {
+      for (let x = minX; x < maxX; x++) {
+        if (map[y][x] === "T" || map[y][x] === "H") {
+          actors.push({ kind: map[y][x], x, y, depth: y * T + 16 });
+        }
+      }
+    }
+    actors.push({ kind: "player", depth: py + 14 });
+    actors.sort((a, b) => a.depth - b.depth);
+
+    for (const o of actors) {
+      if (o.kind !== "player") {
+        tile(o.x, o.y, map[o.y][o.x], time);
+        continue;
+      }
+
+      rect(px + 3, py + 12, 10, 3, "#2d513d");
+      if (world.image) {
+        const image = world.image;
+        const width = Math.max(14, Math.min(23, image.naturalWidth));
+        const height = Math.max(14, Math.min(23, image.naturalHeight));
+        const bob =
+          world.progress &&
+          !world.reduce &&
+          !matchMedia("(prefers-reduced-motion: reduce)").matches &&
+          Math.floor(world.progress * 4) % 2
+            ? -1
+            : 0;
+
+        ctx.save();
+        if (world.facing === "left") {
+          ctx.translate(Math.round(px) + 16, 0);
+          ctx.scale(-1, 1);
+          ctx.drawImage(image, Math.round((16 - width) / 2), Math.round(py + 13 - height + bob), width, height);
+        } else {
+          ctx.drawImage(image, Math.round(px + (16 - width) / 2), Math.round(py + 13 - height + bob), width, height);
+        }
+        ctx.restore();
+      }
+    }
+
+    ctx.restore();
+  }
+
+  function startLoop() {
+    if (world.raf || !world.playing || world.paused || $("world-view").hidden) return;
+    world.raf = requestAnimationFrame(function frame(now) {
+      world.raf = 0;
+      if (!world.playing || world.paused || $("world-view").hidden) return;
+      move(Math.min(40, world.last ? now - world.last : 16));
+      world.last = now;
+      drawWorld(now);
+      world.raf = requestAnimationFrame(frame);
+    });
+  }
+
+  const keys = {
+    w: "up",
+    arrowup: "up",
+    s: "down",
+    arrowdown: "down",
+    a: "left",
+    arrowleft: "left",
+    d: "right",
+    arrowright: "right"
+  };
+
+  function setDir(d, on) {
+    world.pressed = world.pressed.filter(x => x !== d);
+    if (on) {
+      world.pressed.push(d);
+      drawWorld();
+      startLoop();
+    }
+  }
+
+  document.addEventListener("keydown", e => {
+    if (
+      !world.playing ||
+      world.paused ||
+      $("world-view").hidden ||
+      ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName)
+    ) {
+      return;
+    }
+
+    const d = keys[e.key.toLowerCase()];
+    if (d) {
+      e.preventDefault();
+      if (!e.repeat) setDir(d, true);
+    } else if (e.key === " " || e.key.toLowerCase() === "e") {
+      e.preventDefault();
+      interact();
+    }
+  });
+
+  document.addEventListener("keyup", e => {
+    const d = keys[e.key.toLowerCase()];
+    if (d) setDir(d, false);
+  });
+
+  document.querySelectorAll("[data-direction]").forEach(b => {
+    const d = b.dataset.direction;
+    b.addEventListener("pointerdown", e => {
+      e.preventDefault();
+      b.setPointerCapture(e.pointerId);
+      if (world.playing && !world.paused) setDir(d, true);
+    });
+    for (const type of ["pointerup", "pointercancel", "lostpointercapture"]) {
+      b.addEventListener(type, () => setDir(d, false));
+    }
+  });
+
+  window.addEventListener("blur", () => {
+    if (world.playing && !world.paused) pauseWorld(true);
+  });
+
   renderCompare();
   loadCatalog();
 })();
