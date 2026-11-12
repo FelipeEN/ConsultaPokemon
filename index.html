@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pokédex Completa</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/lucide@0.577.0/dist/umd/lucide.min.js"></script>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+</head>
+<body class="w-full">
+  <div class="shell w-full">
+    <header class="top">
+      <div class="wrap flex flex-wrap items-center justify-between gap-4 py-5">
+        <div class="flex items-center gap-4">
+          <div class="device-light" aria-hidden="true"></div>
+          <div class="flex gap-2 self-start pt-1" aria-hidden="true">
+            <span class="mini-light bg-red-300"></span>
+            <span class="mini-light bg-yellow-300"></span>
+            <span class="mini-light bg-teal-300"></span>
+          </div>
+          <div>
+            <strong class="block leading-tight text-white text-xl font-extrabold">POKÉDEX</strong>
+            <span class="mono block tracking-widest text-xs text-yellow-100">EXPLORE • DESCUBRA • COMPARE</span>
+          </div>
+        </div>
+        <button type="button" id="random-btn" class="primary">↗ Pokémon aleatório</button>
+      </div>
+      <nav class="wrap navscroll flex gap-1 pt-2" aria-label="Seções da Pokédex">
+        <button type="button" class="navbtn active" data-view="search" aria-current="page">Pesquisa</button>
+        <button type="button" class="navbtn" data-view="favorites">Favoritos</button>
+        <button type="button" class="navbtn" data-view="compare">Comparar</button>
+        <button type="button" class="navbtn" data-view="docs">Documentação</button>
+        <button type="button" class="navbtn" data-view="tests">Testes</button>
+      </nav>
+    </header>
+
+    <main class="wrap py-8 md:py-10">
+      <section id="search-view" class="view">
+        <div class="intro mb-7 text-white">
+          <p class="eyebrow mb-3">O UNIVERSO POKÉMON EM DETALHES</p>
+          <h1 class="hero-title font-extrabold tracking-tight leading-tight mb-3">Conheça cada Pokémon.</h1>
+          <p class="max-w-2xl text-base text-[#e5f2ee]">Pesquise por nome ou número, explore espécies e evoluções e monte sua própria coleção de favoritos.</p>
+        </div>
+
+        <form id="search-form" class="panel p-5 md:p-6 mb-7">
+          <div class="flex flex-col md:flex-row gap-3 md:items-end">
+            <div class="flex-1">
+              <label for="pokemon-query" class="block font-bold mb-2">Nome ou número da Pokédex</label>
+              <input id="pokemon-query" class="field" autocomplete="off" placeholder="Ex.: pikachu ou 25">
+            </div>
+            <button type="submit" class="primary">Pesquisar Pokémon</button>
+          </div>
+          <p class="mt-3 text-sm text-[#53677b]">Dica: a busca acima abre os detalhes; use a busca do catálogo para filtrar a listagem.</p>
+        </form>
+
+        <div id="detail-status" role="status" aria-live="polite" class="game-status mb-4"></div>
+        <div id="detail" class="mb-10"></div>
+
+        <div class="flex flex-wrap justify-between items-end gap-4 mb-5 text-white">
+          <div>
+            <p class="eyebrow mb-1">DESCUBRA MAIS</p>
+            <h2 class="font-extrabold text-2xl">Catálogo Pokémon</h2>
+          </div>
+          <div class="flex flex-wrap gap-3 items-end">
+            <div>
+              <label for="list-query" class="block font-bold mb-1 text-sm">Buscar no catálogo</label>
+              <input id="list-query" class="field" type="search" autocomplete="off" placeholder="Nome ou número">
+            </div>
+            <div>
+              <label for="type-filter" class="block font-bold mb-1 text-sm">Filtrar por tipo</label>
+              <select id="type-filter" class="field min-w-36">
+                <option value="">Todos os tipos</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div id="list-status" role="status" aria-live="polite" class="game-status mb-3"></div>
+        <div id="catalog" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4"></div>
+        <div class="flex items-center justify-between gap-3 mt-7">
+          <button id="prev-btn" type="button" class="secondary">← Anterior</button>
+          <span id="page-info" class="mono text-center text-xs md:text-sm text-white" aria-live="polite"></span>
+          <button id="next-btn" type="button" class="secondary">Próxima →</button>
+        </div>
+      </section>
+
+      <section id="favorites-view" class="view" hidden>
+        <p class="eyebrow mb-2">SUA COLEÇÃO</p>
+        <h2 class="font-extrabold text-white text-2xl mb-2">Pokémon favoritos</h2>
+        <p class="text-[#d8e7e9] mb-6">Seus favoritos ficam salvos neste navegador.</p>
+        <div id="favorites-status" role="status" aria-live="polite" class="game-status mb-4"></div>
+        <div id="favorites-list" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4"></div>
+      </section>
+
+      <section id="compare-view" class="view" hidden>
+        <p class="eyebrow mb-2">LADO A LADO</p>
+        <h2 class="font-extrabold text-white text-2xl mb-2">Comparar Pokémon</h2>
+        <p class="text-[#d8e7e9] mb-6">Selecione até dois Pokémon no catálogo, nos detalhes ou nos favoritos.</p>
+        <div id="compare-list" class="compare-grid grid grid-cols-2 gap-5" aria-live="polite"></div>
+      </section>
+
+      <section id="docs-view" class="view" hidden>
+        <p class="eyebrow mb-2">POR DENTRO DO PROJETO</p>
+        <h2 class="font-extrabold text-white text-2xl mb-6">Documentação</h2>
+        <div class="grid md:grid-cols-2 gap-5">
+          <article class="panel p-6">
+            <h3 class="font-bold text-lg mb-3">Endpoints da PokéAPI</h3>
+            <p class="leading-relaxed text-[#53677b]">A aplicação utiliza dados reais de https://pokeapi.co/api/v2. O endpoint de Pokémon fornece medidas, imagens, habilidades, movimentos e estatísticas. A lista fornece o catálogo; tipo, espécie e cadeia de evolução complementam os detalhes.</p>
+            <code class="mono text-xs break-all block mt-4 bg-[#dcebe6] p-3 rounded-lg">GET /pokemon/{id|name}<br>GET /pokemon?limit=...&amp;offset=...<br>GET /type/{name}<br>GET /pokemon-species/{id}<br>GET /evolution-chain/{id}</code>
+          </article>
+          <article class="panel p-6">
+            <h3 class="font-bold text-lg mb-3">API Gateway</h3>
+            <p class="leading-relaxed text-[#53677b]">Todas as requisições passam por um único gateway JavaScript com funções para Pokémon, lista, tipos, espécie e evoluções. Ele valida respostas HTTP e JSON; a interface trata separadamente ausência de resultados, falhas de rede e dados opcionais indisponíveis.</p>
+          </article>
+          <article class="panel p-6">
+            <h3 class="font-bold text-lg mb-3">Cache e favoritos</h3>
+            <p class="leading-relaxed text-[#53677b]">As respostas são reutilizadas em memória e no armazenamento local, com validade de 24 horas. Após esse prazo, a próxima consulta busca dados atualizados. Um serviço independente salva os números dos favoritos no navegador e sincroniza os botões da interface.</p>
+          </article>
+          <article class="panel p-6">
+            <h3 class="font-bold text-lg mb-3">Como executar os testes</h3>
+            <p class="leading-relaxed text-[#53677b]">Abra a aba Testes e clique em Executar testes. Os testes são locais e não usam a rede: verificam conversões, normalização, validação de dados, paginação e operações de favoritos. O resultado de cada verificação aparece na própria página.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="tests-view" class="view" hidden>
+        <p class="eyebrow mb-2">VERIFICAÇÃO LOCAL</p>
+        <h2 class="font-extrabold text-white text-2xl mb-2">Testes demonstrativos</h2>
+        <p class="text-[#d8e7e9] mb-5">Verificações de funções puras, executadas sem depender da PokéAPI.</p>
+        <button id="run-tests" type="button" class="primary mb-5">Executar testes</button>
+        <div id="test-results" class="panel p-5 space-y-3" role="status" aria-live="polite"></div>
+      </section>
+    </main>
+
+    <footer class="wrap border-t border-[#658398] py-7">
+      <p class="text-[#c9dde1] text-sm">Dados fornecidos pela PokéAPI · Projeto independente, não oficial.</p>
+    </footer>
+  </div>
+  <div id="toast" class="toast" role="status" hidden></div>
+  <script src="script.js"></script>
+</body>
+</html>
