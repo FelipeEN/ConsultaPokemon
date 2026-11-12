@@ -46,9 +46,7 @@
           <label class="block font-bold mb-2" for="pokemon-query">Nome ou número da Pokédex</label>
           <div class="flex flex-col sm:flex-row gap-3">
             <div class="relative flex-1">
-              <input id="pokemon-query" class="field" autocomplete="off" role="combobox"
-                aria-autocomplete="list" aria-expanded="false" aria-controls="pokemon-query-suggestions"
-                placeholder="Ex.: pikachu ou 25">
+              <input id="pokemon-query" class="field" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="pokemon-query-suggestions" placeholder="Ex.: pikachu ou 25">
               <div id="pokemon-query-suggestions" class="suggestions" role="listbox" hidden></div>
             </div>
             <button class="primary" type="submit">Pesquisar Pokémon</button>
@@ -59,14 +57,12 @@
         <div id="detail-status" class="status" role="status" aria-live="polite"></div>
         <div id="detail" class="mb-9"></div>
 
-        <h2 class="font-extrabold mb-4 text-white text-2xl">Catálogo Pokémon</h2>
+        <h2 class="font-extrabold mb-4 text-white text-[24px]">Catálogo Pokémon</h2>
         <div class="flex flex-wrap gap-3 mb-5">
           <div class="flex-1 min-w-44">
             <label class="block mb-1 text-white font-bold" for="list-query">Buscar no catálogo</label>
             <div class="relative">
-              <input id="list-query" class="field" autocomplete="off" type="search" role="combobox"
-                aria-autocomplete="list" aria-expanded="false" aria-controls="list-query-suggestions"
-                placeholder="Nome ou número">
+              <input id="list-query" class="field" autocomplete="off" type="search" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="list-query-suggestions" placeholder="Nome ou número">
               <div id="list-query-suggestions" class="suggestions" role="listbox" hidden></div>
             </div>
           </div>
@@ -90,7 +86,7 @@
 
       <!-- FAVORITOS -->
       <section id="favorites-view" class="view" hidden aria-labelledby="favorites-title">
-        <h2 id="favorites-title" class="font-extrabold mb-2 text-white text-2xl">Pokémon favoritos</h2>
+        <h2 id="favorites-title" class="font-extrabold mb-2 text-white text-[24px]">Pokémon favoritos</h2>
         <p class="mb-6 text-[#d8e7e9]">Seus favoritos ficam salvos neste navegador.</p>
         <div id="favorites-status" class="status" role="status"></div>
         <div id="favorites-list" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4"></div>
@@ -98,15 +94,16 @@
 
       <!-- COMPARAR -->
       <section id="compare-view" class="view" hidden aria-labelledby="compare-title">
-        <h2 id="compare-title" class="font-extrabold mb-2 text-white text-2xl">Comparar Pokémon</h2>
+        <h2 id="compare-title" class="font-extrabold mb-2 text-white text-[24px]">Comparar Pokémon</h2>
         <p class="mb-6 text-[#d8e7e9]">Selecione até dois Pokémon no catálogo, nos detalhes ou nos favoritos.</p>
         <div id="compare-list" class="grid md:grid-cols-2 gap-5"></div>
       </section>
 
       <!-- BATALHA -->
       <section id="battle-view" class="view" hidden aria-labelledby="battle-title">
-        <h2 id="battle-title" class="font-extrabold mb-2 text-white text-2xl">Batalha Pokémon</h2>
+        <h2 id="battle-title" class="font-extrabold mb-2 text-white text-[24px]">Batalha Pokémon</h2>
         <p class="mb-5 text-[#d8e7e9]">Escolha Pokémon reais para cada treinador e acompanhe uma batalha recreativa por turnos.</p>
+
         <div class="panel p-4 md:p-6">
           <label class="block mb-2 font-bold" for="battle-format">Formato da batalha</label>
           <select id="battle-format" class="field max-w-40 mb-5">
@@ -135,7 +132,8 @@
 
                 <div id="enemy-hp-box" class="hp-box enemy" hidden>
                   <div class="hp-head">
-                    <strong id="enemy-name"></strong><small id="enemy-level"></small>
+                    <strong id="enemy-name"></strong>
+                    <small id="enemy-level"></small>
                   </div>
                   <div class="hp-track" role="meter" aria-label="Vida do Pokémon adversário" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
                     <span id="enemy-hp-fill" class="hp-fill"></span>
@@ -145,7 +143,8 @@
 
                 <div id="player-hp-box" class="hp-box player" hidden>
                   <div class="hp-head">
-                    <strong id="player-name"></strong><small id="player-level"></small>
+                    <strong id="player-name"></strong>
+                    <small id="player-level"></small>
                   </div>
                   <div class="hp-track" role="meter" aria-label="Vida do Pokémon do jogador" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
                     <span id="player-hp-fill" class="hp-fill"></span>
@@ -158,45 +157,36 @@
               </div>
 
               <div class="battle-bottom">
-                <div id="battle-message" class="battle-dialog" role="status" aria-live="polite">
-                  Escolha seus Pokémon para começar.
-                </div>
                 <div class="battle-controls" role="group" aria-label="Comandos da batalha">
-                  <button id="battle-start" type="button" style="color: rgb(23, 52, 74); font-weight: 700;">Iniciar batalha</button>
+                  <button id="battle-start" type="button">Iniciar batalha</button>
                   <button id="battle-pause" type="button" hidden>
-                    <span class="pause-word" style="color: rgb(23, 52, 74);">Pausar</span>
-                    <span class="resume-word" hidden style="color: rgb(23, 52, 74);">Continuar</span>
+                    <span class="pause-word">Pausar</span>
+                    <span class="resume-word" hidden>Continuar</span>
                   </button>
-                  <button id="battle-reset" type="button" hidden style="color: rgb(23, 52, 74);">Reiniciar batalha</button>
+                  <button id="battle-reset" type="button" hidden>Reiniciar batalha</button>
                 </div>
               </div>
             </div>
           </div>
 
           <div id="battle-status" class="status" role="status" aria-live="polite"></div>
-
-          <div class="battle-log-panel mt-5">
-            <h3 class="font-bold text-[#18304a]">Registro da batalha</h3>
-            <ol id="battle-log" class="list-decimal pl-6 mt-3 space-y-2" aria-live="polite"></ol>
-          </div>
         </div>
+
         <p class="mt-6 text-[#d8e7e9] text-[13px]">Simulação recreativa baseada em estatísticas da PokéAPI. Não reproduz o sistema oficial de batalha.</p>
       </section>
 
       <!-- MUNDO ABERTO -->
       <section id="world-view" class="view" hidden aria-labelledby="world-title">
         <p class="eyebrow mb-2">UMA ROTA PARA DESCOBRIR</p>
-        <h2 id="world-title" class="font-extrabold mb-2 text-white text-2xl">Mundo Aberto</h2>
+        <h2 id="world-title" class="font-extrabold mb-2 text-white text-[24px]">Mundo Aberto</h2>
         <p class="mb-6 text-[#d8e7e9]">Escolha um Pokémon da PokéAPI e explore uma rota pixel art original entre a vila, o bosque, o lago e a clareira.</p>
 
         <div id="world-selection" class="panel p-5 md:p-7">
           <form id="world-form">
-            <label class="block font-bold mb-2" for="world-query">Escolha seu Pokémon (nome ou número)</label>
+            <label class="block font-bold mb-2" for="world-query">Escolha seu Pokémon: nome ou número</label>
             <div class="flex flex-col sm:flex-row gap-3">
               <div class="relative flex-1">
-                <input id="world-query" class="field w-full" autocomplete="off" role="combobox"
-                  aria-autocomplete="list" aria-expanded="false" aria-controls="world-query-suggestions"
-                  placeholder="Ex.: bulbasaur ou 1">
+                <input id="world-query" class="field w-full" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="world-query-suggestions" placeholder="Ex.: bulbasaur ou 1">
                 <div id="world-query-suggestions" class="suggestions" role="listbox" hidden></div>
               </div>
               <button id="world-load" class="secondary" type="submit">Carregar Pokémon</button>
@@ -227,8 +217,7 @@
           </div>
 
           <div id="world-frame" class="world-frame">
-            <canvas id="world-canvas" width="320" height="192" tabindex="0" role="img"
-              aria-label="Mapa original explorável em grade. Use WASD, setas ou controles touch para caminhar."></canvas>
+            <canvas id="world-canvas" width="320" height="192" tabindex="0" role="img" aria-label="Mapa original explorável em grade. Use WASD, setas ou controles touch para caminhar."></canvas>
             <div id="world-overlay" class="world-overlay" hidden>PAUSADO</div>
           </div>
 
@@ -270,7 +259,7 @@
 
       <!-- DOCUMENTAÇÃO -->
       <section id="docs-view" class="view" hidden aria-labelledby="docs-title">
-        <h2 id="docs-title" class="font-extrabold mb-5 text-white text-2xl">Documentação</h2>
+        <h2 id="docs-title" class="font-extrabold mb-5 text-white text-[24px]">Documentação</h2>
         <div class="grid md:grid-cols-2 gap-5">
           <article class="panel p-6">
             <h3 class="font-bold mb-2 text-[19px]">Dados da PokéAPI</h3>
@@ -293,7 +282,7 @@
 
       <!-- TESTES -->
       <section id="tests-view" class="view" hidden aria-labelledby="tests-title">
-        <h2 id="tests-title" class="font-extrabold mb-3 text-white text-2xl">Testes demonstrativos</h2>
+        <h2 id="tests-title" class="font-extrabold mb-3 text-white text-[24px]">Testes demonstrativos</h2>
         <p class="mb-5 text-[#d8e7e9]">Verificações locais que não dependem da PokéAPI.</p>
         <button id="run-tests" class="primary" type="button">Executar testes</button>
         <div id="test-results" class="panel p-5 mt-5 space-y-2" role="status" aria-live="polite"></div>
@@ -301,7 +290,7 @@
     </main>
 
     <footer class="wrap border-t border-[#658398] py-7">
-      <p class="text-[#c9dde1] text-[13px]">Dados fornecidos pela PokéAPI. Projeto independente, não oficial.</p>
+      <p class="text-[#c9dde1] text-[13px]">Dados fornecidos pela PokéAPI · Projeto independente, não oficial.</p>
     </footer>
   </div>
 

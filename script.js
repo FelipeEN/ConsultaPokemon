@@ -67,6 +67,7 @@
     p.sprites?.versions?.["generation-v"]?.["black-white"]?.animated?.front_default ||
     p.sprites?.front_default ||
     p.sprites?.other?.["official-artwork"]?.front_default;
+
   const art = p => p.sprites?.other?.["official-artwork"]?.front_default || sprite(p);
 
   const pic = (url, name, classes) =>
@@ -81,7 +82,12 @@
 
   const stats = p =>
     (p.stats || [])
-      .map(s => `<div class="flex justify-between border-b border-[#b7cad0] py-1 text-sm"><span>${esc(s.stat.name.replaceAll("-", " "))}</span><strong>${Number(s.base_stat) || 0}</strong></div>`)
+      .map(
+        s => `<div class="flex justify-between border-b border-[#b7cad0] py-1 text-sm">
+          <span>${esc(s.stat.name.replaceAll("-", " "))}</span>
+          <strong>${Number(s.base_stat) || 0}</strong>
+        </div>`
+      )
       .join("");
 
   let entries = [];
@@ -105,9 +111,7 @@
   };
 
   function switchView(view) {
-    document.querySelectorAll(".view").forEach(e => {
-      e.hidden = e.id !== view + "-view";
-    });
+    document.querySelectorAll(".view").forEach(e => (e.hidden = e.id !== view + "-view"));
     document.querySelectorAll(".navbtn").forEach(b => {
       b.classList.toggle("active", b.dataset.view === view);
       if (b.dataset.view === view) b.setAttribute("aria-current", "page");
@@ -124,7 +128,6 @@
     b.addEventListener("click", () => switchView(b.dataset.view))
   );
 
-  // AUTOCOMPLETE REUTILIZÁVEL
   function attachAutocomplete(input, onChoose) {
     const box = $(input.id + "-suggestions");
     let timer = 0;
@@ -171,8 +174,7 @@
         box.innerHTML = matches.length
           ? matches
               .map(
-                (p, i) => `
-                <button id="${box.id}-${p.id}" class="suggestion" role="option" aria-selected="${i === 0}" data-id="${p.id}" type="button">
+                (p, i) => `<button id="${box.id}-${p.id}" class="suggestion" role="option" aria-selected="${i === 0}" data-id="${p.id}" type="button">
                   <span class="mono">#${p.id}</span>
                   <span class="capitalize flex-1">${esc(p.name)}</span>
                   <span data-thumb="${p.id}" aria-hidden="true"></span>
@@ -233,20 +235,19 @@
   attachAutocomplete($("list-query"), applyFilters);
 
   function card(p) {
-    return `
-      <article class="card">
-        <div class="poke-img h-32 sm:h-40">${pic(art(p), p.name, "w-full h-full object-contain p-3")}</div>
-        <div class="p-3">
-          <p class="mono text-xs text-[#53677b]">#${p.id}</p>
-          <h3 class="font-extrabold capitalize truncate">${esc(p.name)}</h3>
-          <div class="flex gap-1 flex-wrap my-2">${badges(p)}</div>
-          <div class="flex flex-wrap gap-2">
-            <button class="secondary !p-2 !text-xs" data-action="open" data-id="${p.id}" type="button">Detalhes</button>
-            <button class="secondary !p-2 !text-xs" data-action="favorite" data-id="${p.id}" type="button"></button>
-            <button class="secondary !p-2 !text-xs" data-action="compare" data-id="${p.id}" type="button"></button>
-          </div>
+    return `<article class="card">
+      <div class="poke-img h-32 sm:h-40">${pic(art(p), p.name, "w-full h-full object-contain p-3")}</div>
+      <div class="p-3">
+        <p class="mono text-xs">#${p.id}</p>
+        <h3 class="font-extrabold capitalize truncate">${esc(p.name)}</h3>
+        <div class="flex gap-1 flex-wrap my-2">${badges(p)}</div>
+        <div class="flex flex-wrap gap-2">
+          <button class="secondary !p-2 !text-xs" data-action="open" data-id="${p.id}" type="button">Detalhes</button>
+          <button class="secondary !p-2 !text-xs" data-action="favorite" data-id="${p.id}" type="button"></button>
+          <button class="secondary !p-2 !text-xs" data-action="compare" data-id="${p.id}" type="button"></button>
         </div>
-      </article>`;
+      </div>
+    </article>`;
   }
 
   function refreshActions() {
@@ -273,26 +274,25 @@
       if (v !== detailVersion) return;
 
       say("detail-status", "");
-      $("detail").innerHTML = `
-        <article class="panel p-5 md:p-7">
-          <div class="grid md:grid-cols-[38%_1fr] gap-6">
-            <div>${pic(art(p), p.name, "poke-img w-full h-64 object-contain rounded-xl")}</div>
-            <div>
-              <p class="mono">Nº ${p.id}</p>
-              <h2 class="font-extrabold capitalize text-3xl my-2">${esc(p.name)}</h2>
-              <div class="flex gap-1 mb-4">${badges(p)}</div>
-              <button class="secondary mr-2" data-action="favorite" data-id="${p.id}" type="button"></button>
-              <button class="secondary" data-action="compare" data-id="${p.id}" type="button"></button>
-              <p class="my-4">Altura: ${(p.height / 10).toFixed(1)} m · Peso: ${(p.weight / 10).toFixed(1)} kg</p>
-              <h3 class="font-bold">Estatísticas base</h3>
-              ${stats(p)}
-            </div>
+      $("detail").innerHTML = `<article class="panel p-5 md:p-7">
+        <div class="grid md:grid-cols-[38%_1fr] gap-6">
+          <div>${pic(art(p), p.name, "poke-img w-full h-64 object-contain rounded-xl")}</div>
+          <div>
+            <p class="mono">Nº ${p.id}</p>
+            <h2 class="font-extrabold capitalize text-3xl my-2">${esc(p.name)}</h2>
+            <div class="flex gap-1 mb-4">${badges(p)}</div>
+            <button class="secondary mr-2" data-action="favorite" data-id="${p.id}" type="button"></button>
+            <button class="secondary" data-action="compare" data-id="${p.id}" type="button"></button>
+            <p class="my-4">Altura: ${(p.height / 10).toFixed(1)} m · Peso: ${(p.weight / 10).toFixed(1)} kg</p>
+            <h3 class="font-bold">Estatísticas base</h3>
+            ${stats(p)}
           </div>
-          <div class="border-t-2 border-[#b7cad0] mt-6 pt-5">
-            <h3 class="font-bold">Espécie e evoluções</h3>
-            <div id="species-detail" aria-live="polite">Consultando espécie...</div>
-          </div>
-        </article>`;
+        </div>
+        <div class="border-t-2 border-[#b7cad0] mt-6 pt-5">
+          <h3 class="font-bold">Espécie e evoluções</h3>
+          <div id="species-detail" aria-live="polite">Consultando espécie...</div>
+        </div>
+      </article>`;
 
       refreshActions();
 
@@ -307,21 +307,20 @@
         say("species-detail", (flavor?.flavor_text || "Descrição indisponível.").replace(/\s+/g, " "));
 
         if (species.evolution_chain?.url) {
-          const chainId = species.evolution_chain.url.match(/\/(\d+)\/?$/)?.[1];
-          if (chainId) {
-            const chain = await api("/evolution-chain/" + chainId);
-            if (v !== detailVersion) return;
-            const stages = [];
-            function walk(node) {
-              stages.push(node.species.name);
-              (node.evolves_to || []).forEach(walk);
-            }
-            walk(chain.chain);
-            $("species-detail").append(
-              document.createElement("br"),
-              document.createTextNode("Evoluções: " + stages.join(" → "))
-            );
+          const chain = await api("/evolution-chain/" + species.evolution_chain.url.match(/\/(\d+)\/?$/)[1]);
+          if (v !== detailVersion) return;
+
+          const stages = [];
+          function walk(node) {
+            stages.push(node.species.name);
+            (node.evolves_to || []).forEach(walk);
           }
+          walk(chain.chain);
+
+          $("species-detail").append(
+            document.createElement("br"),
+            document.createTextNode("Evoluções: " + stages.join(" → "))
+          );
         }
       } catch {
         if (v === detailVersion) say("species-detail", "Dados da espécie indisponíveis no momento.");
@@ -337,10 +336,7 @@
       const first = await api("/pokemon?limit=1&offset=0");
       const all = await api("/pokemon?limit=" + first.count + "&offset=0");
       entries = all.results
-        .map(p => ({
-          name: p.name,
-          id: Number(p.url.match(/\/(\d+)\/?$/)?.[1])
-        }))
+        .map(p => ({ name: p.name, id: Number(p.url.match(/\/(\d+)\/?$/)?.[1]) }))
         .filter(p => p.id);
       applyFilters();
     } catch (e) {
@@ -376,7 +372,7 @@
 
     $("prev-btn").disabled = page === 1;
     $("next-btn").disabled = page === pages;
-    say("page-info", `Página ${page} de ${pages}. ${filtered.length} resultados`);
+    say("page-info", `Página ${page} de ${pages} · ${filtered.length} resultados`);
 
     if (!filtered.length) {
       $("catalog").replaceChildren();
@@ -401,12 +397,12 @@
     $("favorites-list").replaceChildren();
 
     if (!ids.length) {
-      say("favorites-status", "Nenhum favorito ainda.");
+      say("favorites-status", "Nenhum favorito ainda. Adicione Pokémon pela Pesquisa.");
       return;
     }
 
     say("favorites-status", "Carregando favoritos...");
-    const result = await Promise.allSettled(ids.map(id => pokemon(id)));
+    const result = await Promise.allSettled(ids.map(pokemon));
     $("favorites-list").innerHTML = result
       .filter(x => x.status === "fulfilled")
       .map(x => card(x.value))
@@ -419,14 +415,10 @@
     $("compare-list").innerHTML = compared.length
       ? compared
           .map(
-            p => `
-            <article class="panel p-5">
-              <div class="flex justify-between items-center mb-3">
-                <span class="mono">#${p.id}</span>
-                <button class="secondary !p-2 !text-xs" data-action="remove-compare" data-id="${p.id}" type="button">Remover</button>
-              </div>
+            p => `<article class="panel p-5">
+              <button class="secondary float-right !p-2" data-action="remove-compare" data-id="${p.id}" type="button">Remover</button>
               ${pic(art(p), p.name, "poke-img w-full h-44 object-contain rounded-lg")}
-              <h3 class="font-extrabold capitalize text-xl mt-3">${esc(p.name)}</h3>
+              <h3 class="font-extrabold capitalize">${esc(p.name)}</h3>
               <div class="flex gap-1 my-2">${badges(p)}</div>
               ${stats(p)}
             </article>`
@@ -530,25 +522,23 @@
     renderList();
   });
 
-  // BATALHA COM ARENA PIXEL ART E AUTOCOMPLETE
+  /* BATALHA POKÉMON */
   for (let i = 0; i < 4; i++) {
     const host = $(i < 2 ? "team-input-one" : "team-input-two");
     const form = document.createElement("form");
     form.className = "fighter-form mb-4";
     form.dataset.slot = i;
     form.hidden = i % 2 === 1;
-    form.innerHTML = `
-      <label for="fighter-${i}" class="block font-bold mb-1">Pokémon ${(i % 2) + 1}</label>
+    form.innerHTML = `<label for="fighter-${i}" class="block font-bold mb-1">Pokémon ${(i % 2) + 1}</label>
       <div class="flex gap-2">
         <div class="relative min-w-0 flex-1">
-          <input id="fighter-${i}" class="field" autocomplete="off" role="combobox"
-            aria-label="Pokémon ${(i % 2) + 1} do treinador ${i < 2 ? 1 : 2}" aria-autocomplete="list"
-            aria-expanded="false" aria-controls="fighter-${i}-suggestions" placeholder="Nome ou número">
+          <input id="fighter-${i}" class="field" autocomplete="off" role="combobox" aria-label="Pokémon ${(i % 2) + 1} do treinador ${i < 2 ? 1 : 2}" aria-autocomplete="list" aria-expanded="false" aria-controls="fighter-${i}-suggestions" placeholder="Nome ou número">
           <div id="fighter-${i}-suggestions" class="suggestions" role="listbox" hidden></div>
         </div>
         <button class="secondary" type="submit">Escolher</button>
       </div>
       <div id="fighter-status-${i}" class="text-sm mt-2" role="status"></div>`;
+
     host.append(form);
 
     attachAutocomplete($("fighter-" + i), match => {
@@ -569,10 +559,12 @@
       const button = e.currentTarget.querySelector('button[type="submit"]');
       const q = norm($("fighter-" + i).value);
       chosen[i] = null;
+
       if (!q) {
         say("fighter-status-" + i, "Digite um nome ou número.");
         return;
       }
+
       button.disabled = true;
       say("fighter-status-" + i, "Consultando...");
       try {
@@ -599,7 +591,7 @@
     const url = sprite(p);
     if (url?.startsWith("https://")) {
       el.src = url;
-      el.alt = `${p.name}, treinador ${side === "player" ? 1 : 2}`;
+      el.alt = `Sprite de ${p.name}, treinador ${side === "player" ? 1 : 2}`;
       el.hidden = false;
     } else {
       el.removeAttribute("src");
@@ -635,7 +627,10 @@
   function showBattleState(attacker) {
     if (!battle) return;
     const live = battle.fighters.filter(f => f.hp > 0);
-    for (const [team, side] of [[1, "player"], [2, "enemy"]]) {
+    for (const [team, side] of [
+      [1, "player"],
+      [2, "enemy"]
+    ]) {
       const f = live.find(x => x.team === team);
       updateHp(side, f);
       $(side + "-hp-box").classList.toggle("active", !!f && attacker?.team === team);
@@ -677,7 +672,6 @@
     if (teams.size < 2 || battle.turn >= 120) {
       const text = teams.size === 1 ? `Treinador ${live[0].team} venceu!` : "Batalha encerrada em empate.";
       say("battle-status", text);
-      say("battle-message", text);
       showBattleState(null);
       stopBattle();
       $("battle-pause").hidden = true;
@@ -693,15 +687,9 @@
     target.hp = Math.max(0, target.hp - damage);
     const text = `Turno ${++battle.turn}: ${attacker.p.name} atingiu ${target.p.name} (${damage} de dano; ${target.hp} HP restantes).`;
 
-    const li = document.createElement("li");
-    li.textContent = text;
-    $("battle-log").append(li);
-    li.scrollIntoView({ block: "nearest" });
-
-    say("battle-message", text);
+    say("battle-status", text);
     showBattleState(attacker);
     animateTurn(attacker, target);
-
     battleTimer = setTimeout(battleTurn, reduced() ? 250 : 850);
   }
 
@@ -725,16 +713,13 @@
       paused: false
     };
 
-    $("battle-log").replaceChildren();
     say("battle-status", "Batalha recreativa iniciada.");
-    say("battle-message", "Batalha iniciada!");
     $("battle-pause").hidden = false;
     $("battle-reset").hidden = false;
     $("battle-pause").querySelector(".pause-word").hidden = false;
     $("battle-pause").querySelector(".resume-word").hidden = true;
 
     showBattleState(null);
-
     for (const side of ["player", "enemy"]) {
       const el = $(side + "-sprite");
       el.classList.remove("enter", "wait", "attack", "hit");
@@ -742,7 +727,6 @@
       el.classList.add("enter");
       if (!reduced()) setTimeout(() => el.classList.add("wait"), 450);
     }
-
     battleTimer = setTimeout(battleTurn, 850);
   }
 
@@ -754,42 +738,40 @@
     $("battle-pause").querySelector(".pause-word").hidden = paused;
     $("battle-pause").querySelector(".resume-word").hidden = !paused;
     stopBattle();
-    say("battle-message", paused ? "Batalha pausada." : `Batalha retomada. Turno ${battle.turn + 1}.`);
+    say("battle-status", paused ? "Batalha pausada." : `Batalha retomada. Turno ${battle.turn + 1}.`);
     if (!paused) battleTimer = setTimeout(battleTurn, 400);
   });
   $("battle-reset").addEventListener("click", startBattle);
 
-  // MUNDO ABERTO
+  /* MUNDO ABERTO */
   const raw = [
-    "#..........................................#",
-    "#..H..T....T....T.....T...~~~~~~~~~~~~.....#",
-    "#.....T.........T.........~~~~~~~~~~~~.....#",
-    "#..S............T.....T...~~~~~~~~~~~~.....#",
-    "#..T...T..................~~~~~~~~~~~~.....#",
-    "#..F........T.............~~~~~~~~~~~~.....#",
-    "#...........T.............~~~~~~~~~~~~.....#",
-    "#...........T...T.........~~~~~~~~~~~~.....#",
-    "#..H...T.....F............~~~~~~~~~~~~.....#",
-    "#...........T.............============.....#",
-    "#...........T....T........============.....#",
-    "#..S........T.............~~~~~~~~~~~~.....#",
-    "#...........T....T........~~~~~~~~~~~~.....#",
-    "#...........T....T........~~~~~~~~~~~~.....#",
-    "#.....T.....T....T........~~~~~~~~~~~~.....#",
-    "#...........T.............~~~~~~~~~~~~.....#",
-    "#...FFFF....T......T......T....T...........#",
-    "#...........T.............T....T...........#",
-    "#...........T.............T................#",
-    "#....S......T.............T....H...........#",
-    "#...........T.............T................#",
-    "#.....T.....T.............T....S...........#",
-    "#.....T.....T..............................#",
-    "#.....T.....T.............T.....T..........#",
-    "#.....T.....T.............T.....T..........#",
-    "#...........T......T....F.......T..........#",
-    "#T..........T...................T..........#",
-    "#...........T...................T..........#",
-    "#...........T......T............T..........#"
+    "############################################",
+    "#..........T..............T...........T....#",
+    "#..H.......T..............T...........T....#",
+    "#..H...T........F.........T......T.........#",
+    "#..S......................T......T.........#",
+    "#.........T......................T.........#",
+    "#..............F......T....................#",
+    "#..H.......................~~~~~~~~~~......#",
+    "#..H.......................~~~~~~~~~~......#",
+    "#..S.......................===~~~~~~~..S...#",
+    "#......T...................===~~~~~~~......#",
+    "#..........T........T......~~~~~~~~~~......#",
+    "#..S.......................~~~~~~~~~~......#",
+    "#......F........T..........................#",
+    "#.....................T..........T.........#",
+    "#...T..........T.................T.........#",
+    "#....................F.....................#",
+    "#.......T......................T...........#",
+    "#...FFFF....T..................T...........#",
+    "#......................................H...#",
+    "#..S...................................H...#",
+    "#..............T.......................S...#",
+    "#.....T..................T....F............#",
+    "#...T..............T...........T...........#",
+    "#...........T..................T...........#",
+    "#...........T......T...........T...........#",
+    "############################################"
   ];
 
   const MW = 44;
@@ -798,26 +780,18 @@
   const map = raw.map(row => row.padEnd(MW, "#").slice(0, MW).split(""));
 
   function paintRoad() {
-    for (let x = 4; x <= 36; x++) {
-      for (let y = 19; y <= 21; y++) {
+    for (let x = 4; x <= 36; x++)
+      for (let y = 19; y <= 21; y++)
         if (map[y]?.[x] !== undefined && !["~", "=", "H", "S"].includes(map[y][x])) map[y][x] = "p";
-      }
-    }
-    for (let y = 4; y <= 24; y++) {
-      for (let x = 4; x <= 6; x++) {
+    for (let y = 4; y <= 24; y++)
+      for (let x = 4; x <= 6; x++)
         if (map[y]?.[x] && !["H", "S"].includes(map[y][x])) map[y][x] = "p";
-      }
-    }
-    for (let y = 9; y <= 20; y++) {
-      for (let x = 22; x <= 24; x++) {
+    for (let y = 9; y <= 20; y++)
+      for (let x = 22; x <= 24; x++)
         if (map[y]?.[x] && !["~", "="].includes(map[y][x])) map[y][x] = "p";
-      }
-    }
-    for (let x = 24; x <= 37; x++) {
-      for (let y = 9; y <= 10; y++) {
+    for (let x = 24; x <= 37; x++)
+      for (let y = 9; y <= 10; y++)
         if (map[y]?.[x] && map[y][x] !== "=") map[y][x] = "p";
-      }
-    }
   }
   paintRoad();
 
@@ -832,7 +806,6 @@
   ];
 
   const solid = (x, y) => x < 0 || y < 0 || x >= MW || y >= MH || ["#", "T", "H", "~", "F"].includes(map[y][x]);
-
   const canvas = $("world-canvas");
   const ctx = canvas.getContext("2d", { alpha: false });
   ctx.imageSmoothingEnabled = false;
@@ -857,7 +830,6 @@
     cameraX: 0,
     cameraY: 0
   };
-
   let worldVersion = 0;
 
   $("world-query").addEventListener("input", () => {
@@ -868,7 +840,9 @@
     $("world-picked").hidden = true;
   });
 
-  attachAutocomplete($("world-query"), () => $("world-load").click());
+  attachAutocomplete($("world-query"), () => {
+    $("world-load").click();
+  });
 
   $("world-form").addEventListener("submit", async e => {
     e.preventDefault();
@@ -898,11 +872,11 @@
       });
 
       if (v !== worldVersion) return;
-
       world.pokemon = p;
       world.image = image;
+
       $("world-selected-image").innerHTML = pic(url, p.name, "w-full h-full object-contain sprite");
-      say("world-selected-name", `#${p.id} ${p.name}`);
+      say("world-selected-name", `#${p.id} · ${p.name}`);
       $("world-selected-types").innerHTML = badges(p);
       $("world-picked").hidden = false;
       $("world-enter").disabled = false;
@@ -1016,11 +990,12 @@
 
     const d = world.pressed.at(-1);
     if (!d) return;
+
     const [dx, dy] = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }[d];
     const nx = world.x + dx;
     const ny = world.y + dy;
-
     if (solid(nx, ny)) return;
+
     if (d === "left" || d === "right") world.facing = d;
     world.toX = nx;
     world.toY = ny;
@@ -1047,9 +1022,8 @@
     } else if (c === "~") {
       rect(X, Y, 16, 16, "#478fb2");
       rect(X, Y + 12, 16, 4, "#347b9d");
-      if ((!world.reduce && !reduced()) || seed % 2) {
+      if ((!world.reduce && !reduced()) || seed % 2)
         rect(X + 3 + ((Math.floor(time / 700) + seed) % 3), Y + 5, 6, 1, "#8bd2d1");
-      }
     } else if (c === "=") {
       rect(X, Y, 16, 16, "#478fb2");
       rect(X, Y + 2, 16, 12, "#ac7848");
@@ -1110,24 +1084,16 @@
     const minY = Math.max(0, Math.floor(world.cameraY / T) - 1);
     const maxY = Math.min(MH, Math.ceil((world.cameraY + h) / T) + 1);
 
-    for (let y = minY; y < maxY; y++) {
-      for (let x = minX; x < maxX; x++) {
-        tile(x, y, map[y][x], time);
-      }
-    }
+    for (let y = minY; y < maxY; y++)
+      for (let x = minX; x < maxX; x++) tile(x, y, map[y][x], time);
 
     rect(px + 3, py + 12, 10, 3, "#2d513d");
+
     if (world.image) {
       const image = world.image;
       const width = Math.max(14, Math.min(23, image.naturalWidth));
       const height = Math.max(14, Math.min(23, image.naturalHeight));
-      const bob =
-        world.progress &&
-        !world.reduce &&
-        !reduced() &&
-        Math.floor(world.progress * 4) % 2
-          ? -1
-          : 0;
+      const bob = world.progress && !world.reduce && !reduced() && Math.floor(world.progress * 4) % 2 ? -1 : 0;
 
       ctx.save();
       if (world.facing === "left") {
@@ -1139,7 +1105,6 @@
       }
       ctx.restore();
     }
-
     ctx.restore();
   }
 
@@ -1181,9 +1146,8 @@
       world.paused ||
       $("world-view").hidden ||
       ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName)
-    ) {
+    )
       return;
-    }
 
     const d = keys[e.key.toLowerCase()];
     if (d) {
@@ -1207,9 +1171,8 @@
       b.setPointerCapture(e.pointerId);
       if (world.playing && !world.paused) setDir(d, true);
     });
-    for (const type of ["pointerup", "pointercancel", "lostpointercapture"]) {
+    for (const type of ["pointerup", "pointercancel", "lostpointercapture"])
       b.addEventListener(type, () => setDir(d, false));
-    }
     b.addEventListener("click", () => {
       if (world.playing && !world.paused) {
         setDir(d, true);
@@ -1224,17 +1187,17 @@
     if (world.playing && !world.paused) pauseWorld(true);
   });
 
-  // TESTES
+  /* TESTES DEMONSTRATIVOS */
   $("run-tests").addEventListener("click", () => {
     const tests = [
-      ["Normalização", norm(" PIKACHU ") === "pikachu"],
+      ["Normalização", norm("  PIKACHU  ") === "pikachu"],
       ["Grade do mundo", map.every(row => row.length === MW)],
       ["Ponto inicial transitável", !solid(5, 20)],
       ["Limite da câmera", Math.max(0, Math.min(0, 5)) === 0],
       ["Paginação", Math.ceil(41 / 20) === 3]
     ];
     $("test-results").innerHTML = tests
-      .map(([title, ok]) => `<p><strong>${ok ? "APROVADO" : "REPROVADO"}</strong> ${title}</p>`)
+      .map(([title, ok]) => `<p><strong>${ok ? "APROVADO" : "REPROVADO"}</strong> · ${title}</p>`)
       .join("");
   });
 
